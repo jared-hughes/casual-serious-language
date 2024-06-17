@@ -1,0 +1,21 @@
+[package]
+name = "casual-serious-language"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jared Hughes <jahughes241@gmail.com>"]
+description = """
+A casual attempt at a serious programming language.
+"""
+readme = "README.md"
+documentation = "https://github.com/jared-hughes/casual-serious-language"
+homepage = "https://github.com/jared-hughes/casual-serious-language"
+repository = "https://github.com/jared-hughes/casual-serious-language"
+license = "MIT"
+categories = ["compilers", "command-line-utilities"]
+
+[[bin]]
+bench = false
+path = "src/cli.rs"
+name = "casual-serious-language"
+
+[dependencies]
