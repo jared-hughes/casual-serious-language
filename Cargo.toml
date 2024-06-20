@@ -18,4 +18,5 @@ bench = false
 path = "src/cli.rs"
 name = "casual-serious-language"
 
-[dependencies]
+[dev-dependencies]
+expect-test = "1.5.0"

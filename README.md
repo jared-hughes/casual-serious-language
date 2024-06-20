@@ -4,7 +4,21 @@ A serious programming language, but casually.
 
 Going for features that I actually use in practice. Early in development.
 
+## Next Steps
+
+- Proper error messages (instead of `String`)
+- Improve `IndexVec` impl (to get generic type), and use that for interpreter memory.
+- Varying types (floats etc)
+- Syntax like negative
+- Try symbol/string interning
+- Functions
+- Figure how to type consequent parsing better.
+
+Maybe sometime: Compile instead of interpret
+
 ## Guiding Principles
+
+The WIP is so far from these actually being relevant:
 
 1. Easy to look up the definition of any function. If you see `.repr()` in the source, it's clear exactly what lines implement it. So there will be no VTable generation, and no class inheritance.
 2. No hidden performance pitfalls. Don't implement a convenience feature (`.map()`) if it's much slower than the corresponding longhand (`for ()`).

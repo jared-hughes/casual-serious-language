@@ -1,0 +1,16 @@
+#[path = "a25_ast.rs"]
+pub mod ast;
+#[path = "b10_errors.rs"]
+pub mod errors;
+#[path = "a30_frontend.rs"]
+pub mod frontend;
+#[path = "a40_interpret.rs"]
+pub mod interpret;
+#[path = "a10_lexer.rs"]
+pub mod lexer;
+#[path = "a35_mir.rs"]
+pub mod mir;
+#[path = "a20_parser.rs"]
+pub mod parser;
+#[path = "a15_token.rs"]
+pub mod token;
