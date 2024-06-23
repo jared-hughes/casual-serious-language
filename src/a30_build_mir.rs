@@ -57,14 +57,14 @@ mod frontend_tests {
         check_build_mir(
             "12*3+8/4",
             expect![[r#"
-            BasicBlock
-               0: Literal(Integer(12))
-               1: Literal(Integer(3))
-               2: Binary(Mul, IP(0), IP(1))
-               3: Literal(Integer(8))
-               4: Literal(Integer(4))
-               5: Binary(Div, IP(3), IP(4))
-               6: Binary(Add, IP(2), IP(5))"#]],
+                BasicBlock
+                   0: Literal(Integer(12))
+                   1: Literal(Integer(3))
+                   2: Binary(Mul, IP(0), IP(1))
+                   3: Literal(Integer(8))
+                   4: Literal(Integer(4))
+                   5: Binary(Div, IP(3), IP(4))
+                   6: Binary(Add, IP(2), IP(5))"#]],
         );
     }
 

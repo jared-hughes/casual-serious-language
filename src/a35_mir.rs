@@ -2,6 +2,7 @@ pub use crate::ast::{
     BinOpKind,
     Lit::{self, *},
 };
+use index_vec::IndexVec;
 use std::fmt;
 use std::ops::Index;
 
@@ -14,59 +15,37 @@ pub enum Inst {
 
 /* Indexing */
 
-// TODO: look into [dependencies] index_vec = "0.1.3"
-// index_vec::define_index_type! { pub struct IP = u32; }
-// OR: rustc_index seems a bit nicer.
-
-/// An instruction pointer into a basic block
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct IP(pub u32);
-
-impl IP {
-    #[inline]
-    pub fn inc(&self) -> Self {
-        IP(self.0 + 1)
-    }
-
-    #[inline]
-    pub fn as_u32(self) -> u32 {
-        self.0
-    }
-
-    /// Extracts the value of this index as a `usize`.
-    #[inline]
-    pub fn as_usize(self) -> usize {
-        self.0 as usize
-    }
+index_vec::define_index_type! {
+    pub struct IP = u32;
+    MAX_INDEX = 0xFFFF_FF00;
+    DEBUG_FORMAT = "IP({})";
 }
 
 #[derive(Clone)]
 pub struct BasicBlock {
-    vec: Vec<Inst>,
+    vec: IndexVec<IP, Inst>,
     return_index: IP,
 }
-
-const IP_MAX: usize = 0xFFFF_FF00;
 
 impl Index<IP> for BasicBlock {
     type Output = Inst;
 
     #[inline(always)]
     fn index(&self, i: IP) -> &Self::Output {
-        &self.vec[i.0 as usize]
+        &self.vec[i]
     }
 }
 
 impl BasicBlock {
     pub fn new() -> BasicBlock {
         BasicBlock {
-            vec: Vec::new(),
-            return_index: IP(0),
+            vec: IndexVec::new(),
+            return_index: IP::from_usize(0),
         }
     }
 
     pub fn set_return(&mut self, ip: IP) {
-        assert!(ip.as_usize() < self.len());
+        assert!(ip < self.len());
         self.return_index = ip;
     }
 
@@ -76,9 +55,8 @@ impl BasicBlock {
 
     pub fn push(&mut self, inst: Inst) -> IP {
         let ind = self.vec.len();
-        assert!(ind <= IP_MAX);
         self.vec.push(inst);
-        let ip = IP(ind as u32);
+        let ip = IP::from_usize(ind);
         self.validate_inst(inst, ip);
         ip
     }

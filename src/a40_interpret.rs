@@ -2,6 +2,7 @@ use crate::build_mir::ast_to_mir;
 use crate::errors::Diag;
 use crate::mir::*;
 use crate::parser::parse;
+use index_vec::{index_vec, IndexVec};
 
 pub fn compile_and_interpret(input: &str) -> Result<u32, Diag> {
     let program = ast_to_mir(*parse(input)?)?;
@@ -13,14 +14,13 @@ pub fn interpret_mir(program: BasicBlock) -> u32 {
 }
 
 struct Interpreter {
-    // TODO: Make this an IndexVec too, and remove .as_usize() below.
-    mem: Vec<u32>,
+    mem: IndexVec<IP, u32>,
 }
 
 impl Interpreter {
     pub fn interpret(program: BasicBlock) -> u32 {
         let mut interpreter = Interpreter {
-            mem: vec![0; program.len()],
+            mem: index_vec![0; program.len()],
         };
         interpreter.run(program)
     }
@@ -32,15 +32,15 @@ impl Interpreter {
         for (i, inst) in program.iter().enumerate() {
             self.mem[i] = self.eval(*inst);
         }
-        self.mem[program.get_return().as_usize()]
+        self.mem[program.get_return()]
     }
 
     fn eval(&self, inst: Inst) -> u32 {
         match inst {
             Literal(Integer(x)) => x,
             Binary(op, a_ip, b_ip) => {
-                let a = self.mem[a_ip.as_usize()];
-                let b = self.mem[b_ip.as_usize()];
+                let a = self.mem[a_ip];
+                let b = self.mem[b_ip];
                 match op {
                     BinOpKind::Add => a + b,
                     BinOpKind::Sub => a - b,
