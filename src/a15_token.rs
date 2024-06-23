@@ -6,9 +6,9 @@ pub use Lit::*;
 #[derive(Debug, Clone, Copy)]
 pub enum Lit {
     /// e.g. `1`, `1e3`
-    Integer(u32),
+    Integer(i64),
     // e.g. `1.`, `1.0`, `1.0e3`
-    // Float,
+    Float(f64),
 }
 
 pub use BinOpToken::*;

@@ -8,6 +8,8 @@ pub mod build_mir_err;
 pub mod errors;
 #[path = "a40_interpret.rs"]
 pub mod interpret;
+#[path = "a36_intrinsics.rs"]
+pub mod intrinsics;
 #[path = "a10_lexer.rs"]
 pub mod lexer;
 #[path = "a35_mir.rs"]
@@ -18,7 +20,13 @@ pub mod parser;
 pub mod parser_err;
 #[path = "b04_pos.rs"]
 pub mod pos;
+#[path = "a41_runtime_err.rs"]
+pub mod runtime_err;
+#[path = "a45_runtime_value.rs"]
+pub mod runtime_value;
 #[path = "b05_span.rs"]
 pub mod span;
 #[path = "a15_token.rs"]
 pub mod token;
+#[path = "a34_types.rs"]
+pub mod types;

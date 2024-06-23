@@ -142,12 +142,26 @@ impl<'a> RawLexer<'a> {
             // Numeric literal.
             '0'..='9' => {
                 self.eat_while(is_digit);
-                let mut val: u32 = 0;
-                for c in self.slice().chars() {
-                    val *= 10;
-                    val += c.to_digit(10).expect("Digits are digits");
+                match self.peek() {
+                    '.' => {
+                        // Dumbest possible float: just take trailing '.' to mean float suffix.
+                        let mut val: f64 = 0.0;
+                        for c in self.slice().chars() {
+                            val *= 10.0;
+                            val += f64::from(c.to_digit(10).expect("Digits are digits"));
+                        }
+                        self.consume();
+                        Literal(Float(val))
+                    }
+                    _ => {
+                        let mut val: i64 = 0;
+                        for c in self.slice().chars() {
+                            val *= 10;
+                            val += i64::from(c.to_digit(10).expect("Digits are digits"));
+                        }
+                        Literal(Integer(val))
+                    }
                 }
-                Literal(Integer(val))
             }
 
             '+' => BinOp(Plus),
@@ -228,6 +242,17 @@ mod lexer_tests {
                 Literal(Integer(456)) [len=3]
             "#]],
         );
+    }
+
+    #[test]
+    fn literals() {
+        check_lexing(
+            "37 37.",
+            expect![[r#"
+            Literal(Integer(37)) [len=2]
+            Literal(Float(37.0)) [len=3]
+        "#]],
+        )
     }
 
     fn check_lexing_with_whitespace(input: &str, expect: Expect) {

@@ -6,7 +6,7 @@ Going for features that I actually use in practice. Early in development.
 
 ## Next Steps
 
-- Varying types (floats etc)
+- Proper float syntax
 - Syntax like negative
 - Try symbol/string interning
 - Functions

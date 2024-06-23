@@ -15,6 +15,18 @@ pub enum BinOpKind {
     Div,
 }
 
+impl fmt::Display for BinOpKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Add => "+",
+            Sub => "-",
+            Mul => "*",
+            Div => "/",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 pub type BinOp = Spanned<BinOpKind>;
 
 pub use ExprInner::*;

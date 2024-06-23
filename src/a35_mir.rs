@@ -2,15 +2,30 @@ pub use crate::ast::{
     BinOpKind,
     Lit::{self, *},
 };
+use crate::intrinsics::OP2;
+use crate::span::Span;
+use crate::types::Type;
 use index_vec::IndexVec;
 use std::fmt;
-use std::ops::Index;
 
-pub use Inst::*;
+pub use InstInner::*;
 #[derive(Clone, Copy, Debug)]
-pub enum Inst {
+pub enum InstInner {
     Literal(Lit),
-    Binary(BinOpKind, IP, IP),
+    Binary(OP2, IP, IP),
+}
+
+#[derive(Clone, Copy)]
+pub struct Inst {
+    pub kind: InstInner,
+    pub value_type: Type,
+    pub span: Span,
+}
+
+impl fmt::Debug for Inst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {:?}", self.value_type, self.kind)
+    }
 }
 
 /* Indexing */
@@ -27,14 +42,14 @@ pub struct BasicBlock {
     return_index: IP,
 }
 
-impl Index<IP> for BasicBlock {
-    type Output = Inst;
+// impl Index<IP> for BasicBlock {
+//     type Output = Inst;
 
-    #[inline(always)]
-    fn index(&self, i: IP) -> &Self::Output {
-        &self.vec[i]
-    }
-}
+//     #[inline(always)]
+//     fn index(&self, i: IP) -> &Self::Output {
+//         &self.vec[i]
+//     }
+// }
 
 impl BasicBlock {
     pub fn new() -> BasicBlock {
@@ -53,21 +68,34 @@ impl BasicBlock {
         self.return_index
     }
 
-    pub fn push(&mut self, inst: Inst) -> IP {
+    pub fn push(&mut self, inst: InstInner, span: Span) -> IP {
         let ind = self.vec.len();
-        self.vec.push(inst);
         let ip = IP::from_usize(ind);
-        self.validate_inst(inst, ip);
-        ip
+        let value_type = self.compute_type(inst, ip);
+        self.vec.push(Inst {
+            kind: inst,
+            value_type,
+            span,
+        });
+        return ip;
     }
 
-    fn validate_inst(&self, inst: Inst, ip: IP) {
-        // TODO: Typechecking, once we have floats and such.
+    pub fn get_type(&self, ip: IP) -> Type {
+        return self.vec[ip].value_type;
+    }
+
+    /// Compute the return type of the instruction, and do basic sanity checks.
+    fn compute_type(&self, inst: InstInner, ip: IP) -> Type {
         match inst {
-            Literal(_) => (),
-            Binary(_, a, b) => {
+            Literal(Integer(_)) => Type::I64,
+            Literal(Float(_)) => Type::F64,
+            Binary(op, a, b) => {
                 assert!(a < ip);
                 assert!(b < ip);
+                let info = op.get_intrinsic();
+                assert!(info.param_types.0 == self.get_type(a));
+                assert!(info.param_types.1 == self.get_type(b));
+                info.return_type
             }
         }
     }
