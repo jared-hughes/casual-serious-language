@@ -57,6 +57,15 @@ macro_rules! def_int2 {
     };
 }
 
+// Each function definition inside the macro here produces:
+//   1. An actual function, but of type `fn(RuntimeValue, RuntimeValue) -> FunctionResult`.
+//      It does runtime type checking first to unwrap the `RuntimeValue`s to the
+//      expected types like `i64` or `f64`. Then it does the computation, then
+//      wraps again into a `RuntimeValue`.
+//   2. One arm of a `match` statement that provides a lookup table from the
+//      name of the intrinsic (`OP2`) to the structure `Intrinsic2`,
+//      which provides the parameter and return types, as well as a pointer to
+//      the function generated in (1).
 def_int2! {
 [OP2]
 AddI64 => fn add_i64(a: I64, b: I64) -> I64 {

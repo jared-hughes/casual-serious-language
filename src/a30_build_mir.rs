@@ -97,7 +97,7 @@ mod frontend_tests {
     #[test]
     fn binary_overloading() {
         check_build_mir(
-            "1. + 2.",
+            "1.0 + 2.0",
             expect![[r#"
             BasicBlock
                0: f64 Literal(Float(1.0))
@@ -113,7 +113,7 @@ mod frontend_tests {
                2: i64 Binary(AddI64, IP(0), IP(1))"#]],
         );
         check_build_mir(
-            "1. - 2.",
+            "1.0 - 2.0",
             expect![[r#"
             BasicBlock
                0: f64 Literal(Float(1.0))
@@ -129,7 +129,7 @@ mod frontend_tests {
                2: i64 Binary(SubI64, IP(0), IP(1))"#]],
         );
         check_build_mir(
-            "1. * 2.",
+            "1.0 * 2.0",
             expect![[r#"
             BasicBlock
                0: f64 Literal(Float(1.0))
@@ -145,7 +145,7 @@ mod frontend_tests {
                2: i64 Binary(MulI64, IP(0), IP(1))"#]],
         );
         check_build_mir(
-            "1. / 2.",
+            "1.0 / 2.0",
             expect![[r#"
             BasicBlock
                0: f64 Literal(Float(1.0))
@@ -165,35 +165,35 @@ mod frontend_tests {
     #[test]
     fn type_error_binary() {
         check_build_mir(
-            "1. + 2",
-            expect!["At 4: Type error: Cannot perform f64 + i64"],
+            "1.0 + 2",
+            expect!["At 5: Type error: Cannot perform f64 + i64"],
         );
         check_build_mir(
-            "1 + 2.",
+            "1 + 2.0",
             expect!["At 3: Type error: Cannot perform i64 + f64"],
         );
         check_build_mir(
-            "1. - 2",
-            expect!["At 4: Type error: Cannot perform f64 - i64"],
+            "1.0 - 2",
+            expect!["At 5: Type error: Cannot perform f64 - i64"],
         );
         check_build_mir(
-            "1 - 2.",
+            "1 - 2.0",
             expect!["At 3: Type error: Cannot perform i64 - f64"],
         );
         check_build_mir(
-            "1. * 2",
-            expect!["At 4: Type error: Cannot perform f64 * i64"],
+            "1.0 * 2",
+            expect!["At 5: Type error: Cannot perform f64 * i64"],
         );
         check_build_mir(
-            "1 * 2.",
+            "1 * 2.0",
             expect!["At 3: Type error: Cannot perform i64 * f64"],
         );
         check_build_mir(
-            "1. / 2",
-            expect!["At 4: Type error: Cannot perform f64 / i64"],
+            "1.0 / 2",
+            expect!["At 5: Type error: Cannot perform f64 / i64"],
         );
         check_build_mir(
-            "1 / 2.",
+            "1 / 2.0",
             expect!["At 3: Type error: Cannot perform i64 / f64"],
         );
     }

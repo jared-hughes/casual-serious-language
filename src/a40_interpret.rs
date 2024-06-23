@@ -77,13 +77,13 @@ mod interpret_tests {
 
     #[test]
     fn binary_operators() {
-        check_interpret_mir("1. + 2.", expect!["F64(3.0)"]);
+        check_interpret_mir("1.0 + 2.0", expect!["F64(3.0)"]);
         check_interpret_mir("1 + 2", expect!["I64(3)"]);
-        check_interpret_mir("1. - 2.", expect!["F64(-1.0)"]);
+        check_interpret_mir("1.0 - 2.0", expect!["F64(-1.0)"]);
         check_interpret_mir("1 - 2", expect!["I64(-1)"]);
-        check_interpret_mir("1. * 2.", expect!["F64(2.0)"]);
+        check_interpret_mir("1.0 * 2.0", expect!["F64(2.0)"]);
         check_interpret_mir("1 * 2", expect!["I64(2)"]);
-        check_interpret_mir("1. / 2.", expect!["F64(0.5)"]);
+        check_interpret_mir("1.0 / 2.0", expect!["F64(0.5)"]);
         check_interpret_mir("1 / 2", expect!["I64(0)"]);
     }
 

@@ -90,6 +90,7 @@ impl<'a> Parser<'a> {
             CloseDelim(Parenthesis) => Err(ParseErr::UnmatchedCloseParen(next.span).into_diag()),
             Eof => Err(ParseErr::UnexpectedEOF(next.span).into_diag()),
             Whitespace => panic!("Whitespace should be skipped"),
+            Invalid(x) => Err(ParseErr::InvalidToken(next.span, x).into_diag()),
         }
     }
 
@@ -231,6 +232,7 @@ mod parser_tests {
             ")",
             expect!["At 1: What's this ')' doing here? I don't see a '('"],
         );
+        check_parsing("1.e", expect!["At 1-2: Need at least one digit after '.'."]);
     }
 
     #[test]
@@ -242,6 +244,10 @@ mod parser_tests {
         check_parsing(
             "x)",
             expect!["At 2: Unexpected token here. A binary operator like + may be preferred."],
+        );
+        check_parsing(
+            "x 1.e",
+            expect!["At 3-4: Unexpected token here. A binary operator like + may be preferred."],
         );
     }
 

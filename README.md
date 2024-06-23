@@ -4,13 +4,15 @@ A serious programming language, but casually.
 
 Going for features that I actually use in practice. Early in development.
 
+Reference [docs/SYNTAX.md](/docs/SYNTAX.md) for the language syntax by example.
+
 ## Next Steps
 
-- Proper float syntax
 - Syntax like negative
 - Try symbol/string interning
+- Figure how to type consequent parsing better. (macros?)
+- Change `/` to true division, add `//` for floor division
 - Functions
-- Figure how to type consequent parsing better.
 
 Maybe sometime: Compile instead of interpret
 

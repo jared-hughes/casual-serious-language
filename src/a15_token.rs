@@ -49,9 +49,16 @@ pub enum TokenKind<'a> {
     /// Identifier
     Ident(&'a str),
 
-    /* End of File */
+    /* Unprintables */
     Eof,
     Whitespace,
+    Invalid(InvalidToken),
+}
+
+// TODO: more standard error handling here.
+#[derive(Debug, Clone, Copy)]
+pub struct InvalidToken {
+    pub msg: &'static str,
 }
 
 #[derive(Clone, Copy)]

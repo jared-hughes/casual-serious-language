@@ -1,7 +1,7 @@
 use crate::pos::{ByteLen, BytePos};
 use crate::span::span;
 use crate::token::*;
-use std::str::Chars;
+use std::str::{Chars, FromStr};
 
 pub struct Lexer<'a> {
     lexer: RawLexer<'a>,
@@ -140,29 +140,7 @@ impl<'a> RawLexer<'a> {
             }
 
             // Numeric literal.
-            '0'..='9' => {
-                self.eat_while(is_digit);
-                match self.peek() {
-                    '.' => {
-                        // Dumbest possible float: just take trailing '.' to mean float suffix.
-                        let mut val: f64 = 0.0;
-                        for c in self.slice().chars() {
-                            val *= 10.0;
-                            val += f64::from(c.to_digit(10).expect("Digits are digits"));
-                        }
-                        self.consume();
-                        Literal(Float(val))
-                    }
-                    _ => {
-                        let mut val: i64 = 0;
-                        for c in self.slice().chars() {
-                            val *= 10;
-                            val += i64::from(c.to_digit(10).expect("Digits are digits"));
-                        }
-                        Literal(Integer(val))
-                    }
-                }
-            }
+            '0'..='9' => self.number(),
 
             '+' => BinOp(Plus),
             '-' => BinOp(Minus),
@@ -177,6 +155,94 @@ impl<'a> RawLexer<'a> {
         self.chars_token_start = self.chars.clone();
         TokenLen::new(kind, len)
     }
+
+    fn number(&mut self) -> TokenKind<'a> {
+        self.eat_while(is_digit);
+        // consumed so far: `[digits]`
+        match self.peek() {
+            '.' => {
+                self.consume();
+                let saw_digits = self.eat_decimal_digits();
+                if !saw_digits {
+                    return invalid("Need at least one digit after '.'.");
+                }
+                // consumed so far: `[digits].[digits]`
+                if self.peek() == 'e' {
+                    self.consume();
+                    if self.peek() == '-' {
+                        self.consume();
+                    }
+                    // consumed so far: `[digits].[digits]e` with optional `-`.
+                    let saw_digits = self.eat_decimal_digits();
+                    if !saw_digits {
+                        return invalid("Need at least one digit after 'e'.");
+                    }
+                }
+                // consumed so far: `[digits].[digits]` or `[digits].[digits]e-?digits`
+                match f64::from_str(self.slice()) {
+                    Ok(x) => Literal(Float(x)),
+                    // Should be unreachable:
+                    Err(_) => invalid("Unparseable float."),
+                }
+            }
+            'e' => {
+                let len_before_e = self.len().0 as usize;
+                self.consume();
+                if self.peek() == '-' {
+                    self.consume();
+                }
+                // consumed so far: `[digits]e` with optional `-`.
+                let saw_digits = self.eat_decimal_digits();
+                if !saw_digits {
+                    return invalid("Need at least one digit after 'e'.");
+                }
+                let significand = &self.slice()[0..len_before_e];
+                let exponent = &self.slice()[len_before_e + 1..];
+                match (i64::from_str(significand), i64::from_str(exponent)) {
+                    (Ok(s), Ok(ex)) => {
+                        if ex < 0 {
+                            return invalid("Integer exponent cannot be negative. Use '.' if you want a float literal.");
+                        } else if ex > 20 {
+                            return invalid("Integer exponent is much too large. Use '.' if you want a float literal.");
+                        } else {
+                            let mut v = s;
+                            let mut e = ex;
+                            while e > 0 {
+                                v *= 10;
+                                e -= 1;
+                            }
+                            return Literal(Integer(v));
+                        }
+                    }
+                    // Should be unreachable:
+                    (_, _) => invalid("Unparseable integer with exponent."),
+                }
+            }
+            _ => match i64::from_str(self.slice()) {
+                Ok(x) => Literal(Integer(x)),
+                // Should be unreachable:
+                Err(_) => invalid("Unparseable integer."),
+            },
+        }
+    }
+
+    fn eat_decimal_digits(&mut self) -> bool {
+        let mut has_digits = false;
+        loop {
+            match self.peek() {
+                '0'..='9' => {
+                    has_digits = true;
+                    self.consume();
+                }
+                _ => break,
+            }
+        }
+        has_digits
+    }
+}
+
+fn invalid(msg: &'static str) -> TokenKind {
+    Invalid(InvalidToken { msg })
 }
 
 fn is_whitespace(c: char) -> bool {
@@ -247,12 +313,63 @@ mod lexer_tests {
     #[test]
     fn literals() {
         check_lexing(
-            "37 37.",
+            "01234 12345 1e8 001e009",
             expect![[r#"
-            Literal(Integer(37)) [len=2]
-            Literal(Float(37.0)) [len=3]
+                Literal(Integer(1234)) [len=5]
+                Literal(Integer(12345)) [len=5]
+                Literal(Integer(100000000)) [len=3]
+                Literal(Integer(1000000000)) [len=7]
+            "#]],
+        );
+        check_lexing(
+            "1.0 2.3e122 0.7e-93",
+            expect![[r#"
+            Literal(Float(1.0)) [len=3]
+            Literal(Float(2.3e122)) [len=7]
+            Literal(Float(7e-94)) [len=7]
         "#]],
         )
+    }
+
+    #[test]
+    fn invalid_literals() {
+        check_lexing(
+            "1e-1",
+            expect![[r#"
+                Invalid(InvalidToken { msg: "Integer exponent cannot be negative. Use '.' if you want a float literal." }) [len=4]
+            "#]],
+        );
+        check_lexing(
+            "1e30",
+            expect![[r#"
+                Invalid(InvalidToken { msg: "Integer exponent is much too large. Use '.' if you want a float literal." }) [len=4]
+            "#]],
+        );
+        check_lexing(
+            "1.",
+            expect![[r#"
+            Invalid(InvalidToken { msg: "Need at least one digit after '.'." }) [len=2]
+        "#]],
+        );
+        check_lexing(
+            "1.e5",
+            expect![[r#"
+            Invalid(InvalidToken { msg: "Need at least one digit after '.'." }) [len=2]
+            Ident("e5") [len=2]
+        "#]],
+        );
+        check_lexing(
+            "1.0e",
+            expect![[r#"
+            Invalid(InvalidToken { msg: "Need at least one digit after 'e'." }) [len=4]
+        "#]],
+        );
+        check_lexing(
+            "1.0e-",
+            expect![[r#"
+            Invalid(InvalidToken { msg: "Need at least one digit after 'e'." }) [len=5]
+        "#]],
+        );
     }
 
     fn check_lexing_with_whitespace(input: &str, expect: Expect) {

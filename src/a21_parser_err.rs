@@ -1,5 +1,6 @@
 use crate::errors::{Diag, Diagnostic};
 use crate::span::Span;
+use crate::token;
 use ParseErr::*;
 
 pub enum ParseErr {
@@ -9,6 +10,7 @@ pub enum ParseErr {
     UnexpectedBinaryInitial(Span),
     UnmatchedCloseParen(Span),
     UnexpectedEOF(Span),
+    InvalidToken(Span, token::InvalidToken),
 }
 
 impl Diagnostic for ParseErr {
@@ -39,6 +41,10 @@ impl Diagnostic for ParseErr {
             UnexpectedEOF(span) => Diag {
                 span,
                 message: format!("Hold your horses. An EOF already?"),
+            },
+            InvalidToken(span, token) => Diag {
+                span,
+                message: format!("{}", token.msg),
             },
         }
     }
