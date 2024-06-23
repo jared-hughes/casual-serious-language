@@ -1,9 +1,9 @@
 #[path = "a25_ast.rs"]
 pub mod ast;
+#[path = "a30_build_mir.rs"]
+pub mod build_mir;
 #[path = "b10_errors.rs"]
 pub mod errors;
-#[path = "a30_frontend.rs"]
-pub mod frontend;
 #[path = "a40_interpret.rs"]
 pub mod interpret;
 #[path = "a10_lexer.rs"]
@@ -12,5 +12,10 @@ pub mod lexer;
 pub mod mir;
 #[path = "a20_parser.rs"]
 pub mod parser;
+#[path = "a21_parser_err.rs"]
+pub mod parser_err;
 #[path = "a15_token.rs"]
 pub mod token;
+
+#[path = "a31_build_mir_err.rs"]
+pub mod build_mir_err;

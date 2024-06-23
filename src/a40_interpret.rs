@@ -1,9 +1,9 @@
-use crate::errors::CompileError;
-use crate::frontend::ast_to_mir;
+use crate::build_mir::ast_to_mir;
+use crate::errors::Diag;
 use crate::mir::*;
 use crate::parser::parse;
 
-pub fn compile_and_interpret(input: &str) -> Result<u32, CompileError> {
+pub fn compile_and_interpret(input: &str) -> Result<u32, Diag> {
     let program = ast_to_mir(*parse(input)?)?;
     Ok(interpret_mir(program))
 }
@@ -60,7 +60,7 @@ mod interpret_tests {
     fn check_interpret_mir(input: &str, expect: Expect) {
         let actual = match compile_and_interpret(input) {
             Ok(mir) => format!("{:#?}", mir),
-            Err(msg) => msg,
+            Err(diag) => format!("{:#?}", diag),
         };
         expect.assert_eq(&actual)
     }

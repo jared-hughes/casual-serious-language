@@ -1,6 +1,7 @@
 use crate::ast;
-use crate::errors::CompileError;
+use crate::errors::{Diag, Diagnostic};
 use crate::lexer::Lexer;
+use crate::parser_err::ParseErr;
 use crate::token::*;
 use std::iter::Peekable;
 
@@ -16,14 +17,10 @@ struct Parser<'a> {
 }
 
 type Bexpr = Box<ast::Expr>;
-type ExprResult = Result<Bexpr, CompileError>;
+type ExprResult = Result<Bexpr, Diag>;
 
 pub fn parse(input: &str) -> ExprResult {
     Parser::new(input).parse()
-}
-
-fn err(s: &str) -> ExprResult {
-    Err(s.to_owned())
 }
 
 impl<'a> Parser<'a> {
@@ -36,7 +33,7 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> ExprResult {
         let expr = self.parse_main(BindingPower::Top)?;
         if let Some(_) = self.lexer.peek() {
-            return err("Didn't reach end.");
+            return Err(ParseErr::ExpectedConsequent.into_diag());
         }
         Ok(expr)
     }
@@ -54,7 +51,7 @@ impl<'a> Parser<'a> {
     fn parse_main(&mut self, last_bp: BindingPower) -> ExprResult {
         let mut left = self.parse_initial()?;
         while let Some(_) = self.lexer.peek() {
-            if let Some(tok) = self.consequent_good(last_bp) {
+            if let Some(tok) = self.consequent_good(last_bp)? {
                 left = self.parse_consequent(left, tok)?;
             } else {
                 break;
@@ -73,40 +70,35 @@ impl<'a> Parser<'a> {
                 if let CloseDelim(Parenthesis) = close_paren {
                     return Ok(inner);
                 } else {
-                    return err("Expected ), got something else.");
+                    return Err(ParseErr::OpenParenMissingCloseParen.into_diag());
                 }
             }
-            BinOp(Plus) | BinOp(Minus) => err("Unary plus/minus not supported."),
-            BinOp(_) => err("Unexpected binary operator."),
-            CloseDelim(Parenthesis) => err("Unmatched close paren"),
-            Eof => err("Unexpected end of file."),
+            BinOp(Plus) | BinOp(Minus) => Err(ParseErr::NoUnaryPlusMinus.into_diag()),
+            BinOp(_) => Err(ParseErr::UnexpectedBinaryInitial.into_diag()),
+            CloseDelim(Parenthesis) => Err(ParseErr::UnmatchedCloseParen.into_diag()),
+            Eof => Err(ParseErr::UnexpectedEOF.into_diag()),
         }
     }
 
     /// None = invalid consequent, or is lower binding power than last_bp.
-    fn consequent_good(&mut self, last_bp: BindingPower) -> Option<Token<'a>> {
-        let tok = self.peek();
-        match tok {
+    fn consequent_good(&mut self, last_bp: BindingPower) -> Result<Option<Token<'a>>, Diag> {
+        Ok(match self.peek() {
             BinOp(t) => {
                 if binop_power(t) <= last_bp {
-                    return None;
+                    None
                 } else {
-                    return Some(self.next());
+                    Some(self.next())
                 }
             }
             _ => None,
-        }
+        })
     }
 
     fn parse_consequent(&mut self, left: Bexpr, tok: Token) -> ExprResult {
         match tok {
             BinOp(t) => Ok(self.parse_binop(left, t)?),
-            // TODO: This are probably unreachable
-            // If you write "x)" or "x y", it'll never get the second token.
-            CloseDelim(Parenthesis) => err("Unmatched close paren"),
-            Literal(_) | Ident(_) => err("Missing operator between those."),
-            OpenDelim(_) => err("No function calls."),
-            Eof => todo!(),
+            // Expected consequent_good to return `None` first, if this is reached.
+            _ => panic!("Invariant violation: entered non-good consequent"),
         }
     }
 
@@ -140,7 +132,7 @@ mod parser_tests {
     fn check_parsing(input: &str, expect: Expect) {
         let actual: String = match parse(input) {
             Ok(expr) => format!("{:#?}", expr),
-            Err(s) => s,
+            Err(diag) => format!("{:#?}", diag),
         };
         expect.assert_eq(&actual)
     }
@@ -210,21 +202,33 @@ mod parser_tests {
 
     #[test]
     fn error_token_in_initial() {
-        check_parsing("", expect!["Unexpected end of file."]);
-        check_parsing("/", expect!["Unexpected binary operator."]);
-        check_parsing("+", expect!["Unary plus/minus not supported."]);
-        check_parsing("x+", expect!["Unexpected end of file."]);
-        check_parsing(")", expect!["Unmatched close paren"]);
+        check_parsing("", expect!["Hold your horses. An EOF already?"]);
+        check_parsing(
+            "/",
+            expect!["Unexpected binary operator in initial position."],
+        );
+        check_parsing("+", expect!["Unary '+' or '-' is not supported yet."]);
+        check_parsing("x+", expect!["Hold your horses. An EOF already?"]);
+        check_parsing(
+            ")",
+            expect!["What's this ')' doing here? I don't see a '('"],
+        );
     }
 
     #[test]
     fn error_token_in_consequent() {
-        check_parsing("x x", expect!["Didn't reach end."]);
-        check_parsing("x)", expect!["Didn't reach end."]);
+        check_parsing(
+            "x x",
+            expect!["Unexpected token here. A binary operator like + may be preferred."],
+        );
+        check_parsing(
+            "x)",
+            expect!["Unexpected token here. A binary operator like + may be preferred."],
+        );
     }
 
     #[test]
     fn error_token_in_special() {
-        check_parsing("(x++", expect!["Unary plus/minus not supported."]);
+        check_parsing("(x++", expect!["Unary '+' or '-' is not supported yet."]);
     }
 }

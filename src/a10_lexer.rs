@@ -6,7 +6,7 @@ use RawToken::*;
 pub enum RawToken<'a> {
     Useful(Token<'a>),
     Whitespace,
-    Unknown,
+    Unknown(char),
 }
 
 /// Before any lexing, or after finishing a RawToken, `chars` points to the
@@ -36,7 +36,7 @@ impl<'a> Iterator for Lexer<'a> {
                 // Try for the next token.
                 Whitespace => continue,
                 // Give up.
-                Unknown => panic!("That's a crazy character."),
+                Unknown(c) => panic!("Crazy character '{}'.", c),
             };
         }
     }
@@ -124,7 +124,7 @@ impl<'a> Lexer<'a> {
             '(' => Useful(OpenDelim(Parenthesis)),
             ')' => Useful(CloseDelim(Parenthesis)),
 
-            _ => Unknown,
+            c => Unknown(c),
         };
         self.chars_token_start = self.chars.clone();
         res
