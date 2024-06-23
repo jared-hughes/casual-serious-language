@@ -26,3 +26,11 @@ The WIP is so far from these actually being relevant:
 ## Wacky Ideas (not yet tried)
 
 1. Pointer graph must be a DAG (to make the GC easier, or just for fun). However, cycles are useful (such as passing messages to a main controller), so certain structs can choose to be "owned", preventing more than one reference to them from existing. This allows them to reference their owner via a `WeakRef` that is always valid. If the owner is deleted, the object is deleted.
+
+## Development
+
+To run all tests and take snapshots of what changed:
+
+```sh
+./scripts/update-snapshots.sh
+```
