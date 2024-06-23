@@ -6,7 +6,6 @@ Going for features that I actually use in practice. Early in development.
 
 ## Next Steps
 
-- Proper error messages (instead of `String`)
 - Improve `IndexVec` impl (to get generic type), and use that for interpreter memory.
 - Varying types (floats etc)
 - Syntax like negative

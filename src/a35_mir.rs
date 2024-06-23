@@ -1,5 +1,5 @@
 pub use crate::ast::{
-    BinOp,
+    BinOpKind,
     Lit::{self, *},
 };
 use std::fmt;
@@ -9,7 +9,7 @@ pub use Inst::*;
 #[derive(Clone, Copy, Debug)]
 pub enum Inst {
     Literal(Lit),
-    Binary(BinOp, IP, IP),
+    Binary(BinOpKind, IP, IP),
 }
 
 /* Indexing */

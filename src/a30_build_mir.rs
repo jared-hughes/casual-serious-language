@@ -22,14 +22,14 @@ impl Frontend {
     }
 
     fn add_to_mir(&mut self, ex: Expr) -> Result<IP, Diag> {
-        Ok(match ex {
+        Ok(match ex.body {
             Binary(op, left, right) => {
                 let left_ip = self.add_to_mir(*left)?;
                 let right_ip = self.add_to_mir(*right)?;
-                self.block.push(mir::Binary(op, left_ip, right_ip))
+                self.block.push(mir::Binary(op.node, left_ip, right_ip))
             }
             Literal(lit) => self.block.push(mir::Literal(lit)),
-            Ident(_) => Err(BuildMIRErr::IdentifiersUnsupported.into_diag())?,
+            Ident(_) => Err(BuildMIRErr::IdentifiersUnsupported(ex.span).into_diag())?,
         })
     }
 }
@@ -66,5 +66,10 @@ mod frontend_tests {
                5: Binary(Div, IP(3), IP(4))
                6: Binary(Add, IP(2), IP(5))"#]],
         );
+    }
+
+    #[test]
+    fn error_unsupported() {
+        check_build_mir("x+1", expect!["At 1: Identifier? I hardly know her."]);
     }
 }

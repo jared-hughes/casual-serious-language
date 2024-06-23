@@ -2,6 +2,8 @@
 pub mod ast;
 #[path = "a30_build_mir.rs"]
 pub mod build_mir;
+#[path = "a31_build_mir_err.rs"]
+pub mod build_mir_err;
 #[path = "b10_errors.rs"]
 pub mod errors;
 #[path = "a40_interpret.rs"]
@@ -14,8 +16,9 @@ pub mod mir;
 pub mod parser;
 #[path = "a21_parser_err.rs"]
 pub mod parser_err;
+#[path = "b04_pos.rs"]
+pub mod pos;
+#[path = "b05_span.rs"]
+pub mod span;
 #[path = "a15_token.rs"]
 pub mod token;
-
-#[path = "a31_build_mir_err.rs"]
-pub mod build_mir_err;

@@ -1,9 +1,10 @@
+use crate::span::{Span, Spanned};
 pub use crate::token::Lit;
 use std::fmt;
 
-pub use BinOp::*;
+pub use BinOpKind::*;
 #[derive(Clone, Copy, Debug)]
-pub enum BinOp {
+pub enum BinOpKind {
     /// Addition (`+`)
     Add,
     /// Subtraction (`-`)
@@ -14,8 +15,10 @@ pub enum BinOp {
     Div,
 }
 
-pub use Expr::*;
-pub enum Expr {
+pub type BinOp = Spanned<BinOpKind>;
+
+pub use ExprInner::*;
+pub enum ExprInner {
     /// Binary operation like `a + b`
     Binary(BinOp, Box<Expr>, Box<Expr>),
     /// Literal, such as a number `1`.
@@ -26,7 +29,18 @@ pub enum Expr {
     Ident(String),
 }
 
-impl fmt::Debug for Expr {
+pub struct Expr {
+    pub body: ExprInner,
+    pub span: Span,
+}
+
+impl Expr {
+    pub fn new(body: ExprInner, span: Span) -> Expr {
+        Expr { body, span }
+    }
+}
+
+impl fmt::Debug for ExprInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Binary(op, left, right) => {
@@ -37,5 +51,11 @@ impl fmt::Debug for Expr {
             Self::Literal(x) => write!(f, "Literal({x:?})"),
             Self::Ident(x) => write!(f, "Ident({x:?})"),
         }
+    }
+}
+
+impl fmt::Debug for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:?}){:#?}", self.span, self.body)
     }
 }

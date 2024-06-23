@@ -1,3 +1,4 @@
+use crate::span::Span;
 use std::fmt;
 
 pub trait Diagnostic {
@@ -9,12 +10,13 @@ pub trait Diagnostic {
 #[must_use]
 #[derive(Clone)]
 pub struct Diag {
-    // TODO: code span, severity, suggestions
+    // TODO: severity, suggestions
     pub message: String,
+    pub span: Span,
 }
 
 impl fmt::Debug for Diag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", &self.message)
+        write!(f, "At {:?}: {}", self.span, &self.message)
     }
 }

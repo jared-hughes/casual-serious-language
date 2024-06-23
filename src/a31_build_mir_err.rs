@@ -1,15 +1,18 @@
 use crate::errors::{Diag, Diagnostic};
+use crate::span::Span;
 
 use BuildMIRErr::*;
 pub enum BuildMIRErr {
-    IdentifiersUnsupported,
+    IdentifiersUnsupported(Span),
 }
 
 impl Diagnostic for BuildMIRErr {
     fn into_diag(self) -> Diag {
-        let message = match self {
-            IdentifiersUnsupported => format!("Identifier? I hardly know her."),
-        };
-        Diag { message }
+        match self {
+            IdentifiersUnsupported(span) => Diag {
+                span,
+                message: format!("Identifier? I hardly know her."),
+            },
+        }
     }
 }

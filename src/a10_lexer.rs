@@ -1,19 +1,51 @@
+use crate::pos::{ByteLen, BytePos};
+use crate::span::span;
 use crate::token::*;
 use std::str::Chars;
 
-use RawToken::*;
-#[derive(Debug)]
-pub enum RawToken<'a> {
-    Useful(Token<'a>),
-    Whitespace,
-    Unknown(char),
+pub struct Lexer<'a> {
+    lexer: RawLexer<'a>,
+    pos: BytePos,
+}
+
+impl<'a> Lexer<'a> {
+    pub fn new(input: &'a str) -> Lexer<'a> {
+        Lexer {
+            lexer: RawLexer::new(input),
+            pos: BytePos(0),
+        }
+    }
+}
+
+impl<'a> Iterator for Lexer<'a> {
+    type Item = Token<'a>;
+
+    fn next(&mut self) -> Option<Token<'a>> {
+        loop {
+            let token = self.lexer.next_raw_token();
+            let lo = self.pos;
+            match token.kind {
+                // Just update position
+                Whitespace => {
+                    self.pos = lo + token.len;
+                    continue;
+                }
+                // Common case
+                _ => {
+                    let hi = lo + token.len;
+                    self.pos = hi;
+                    return Some(Token::new(token.kind, span(lo, hi)));
+                }
+            };
+        }
+    }
 }
 
 /// Before any lexing, or after finishing a RawToken, `chars` points to the
 /// first character that has not been in a token yet.
 /// In the middle of finding the extent of a RawToken, `chars_token_start`
 /// points to the first character that will be in this token.
-pub struct Lexer<'a> {
+pub struct RawLexer<'a> {
     /// Iterator pointing at the current character
     chars: Chars<'a>,
     /// Iterator pointing at the character which starts this token
@@ -22,29 +54,23 @@ pub struct Lexer<'a> {
 
 const EOF_CHAR: char = '\0';
 
-impl<'a> Iterator for Lexer<'a> {
-    type Item = Token<'a>;
+impl<'a> Iterator for RawLexer<'a> {
+    type Item = TokenLen<'a>;
 
-    fn next(&mut self) -> Option<Token<'a>> {
-        loop {
-            let token = self.next_raw_token();
-            return match token {
-                // Stop the iterator.
-                Useful(Eof) => None,
-                // Common case
-                Useful(tok) => Some(tok),
-                // Try for the next token.
-                Whitespace => continue,
-                // Give up.
-                Unknown(c) => panic!("Crazy character '{}'.", c),
-            };
-        }
+    fn next(&mut self) -> Option<TokenLen<'a>> {
+        let token = self.next_raw_token();
+        return match token.kind {
+            // Stop the iterator
+            Eof => None,
+            // Common case
+            _ => Some(token),
+        };
     }
 }
 
-impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Lexer<'a> {
-        Lexer {
+impl<'a> RawLexer<'a> {
+    pub fn new(input: &'a str) -> RawLexer<'a> {
+        RawLexer {
             chars: input.chars(),
             chars_token_start: input.chars(),
         }
@@ -82,7 +108,14 @@ impl<'a> Lexer<'a> {
     }
 }
 
-impl<'a> Lexer<'a> {
+impl<'a> RawLexer<'a> {
+    /** Length of the current token, in bytes. */
+    fn len(&self) -> ByteLen {
+        let start = self.chars_token_start.as_str();
+        ByteLen::from(start.len() - self.chars.as_str().len())
+    }
+
+    /** Borrowed string slice containing all chars of the current token. */
     fn slice(&self) -> &'a str {
         let start = self.chars_token_start.as_str();
         let num_bytes = start.len() - self.chars.as_str().len();
@@ -90,12 +123,12 @@ impl<'a> Lexer<'a> {
     }
 
     /// Parses a token from the input string, including whitespace.
-    fn next_raw_token(&mut self) -> RawToken<'a> {
+    fn next_raw_token(&mut self) -> TokenLen<'a> {
         let first_char = match self.consume() {
             Some(c) => c,
-            None => return Useful(Eof),
+            None => return TokenLen::new(Eof, ByteLen(0)),
         };
-        let res = match first_char {
+        let kind = match first_char {
             c if is_whitespace(c) => {
                 self.eat_while(is_whitespace);
                 Whitespace
@@ -103,7 +136,7 @@ impl<'a> Lexer<'a> {
 
             c if is_id_start(c) => {
                 self.eat_while(is_id_continue);
-                Useful(Ident(self.slice()))
+                Ident(self.slice())
             }
 
             // Numeric literal.
@@ -114,20 +147,21 @@ impl<'a> Lexer<'a> {
                     val *= 10;
                     val += c.to_digit(10).expect("Digits are digits");
                 }
-                Useful(Literal(Integer(val)))
+                Literal(Integer(val))
             }
 
-            '+' => Useful(BinOp(Plus)),
-            '-' => Useful(BinOp(Minus)),
-            '*' => Useful(BinOp(Star)),
-            '/' => Useful(BinOp(Slash)),
-            '(' => Useful(OpenDelim(Parenthesis)),
-            ')' => Useful(CloseDelim(Parenthesis)),
+            '+' => BinOp(Plus),
+            '-' => BinOp(Minus),
+            '*' => BinOp(Star),
+            '/' => BinOp(Slash),
+            '(' => OpenDelim(Parenthesis),
+            ')' => CloseDelim(Parenthesis),
 
-            c => Unknown(c),
+            c => panic!("Crazy character '{}'.", c),
         };
+        let len = self.len();
         self.chars_token_start = self.chars.clone();
-        res
+        TokenLen::new(kind, len)
     }
 }
 
@@ -166,7 +200,11 @@ mod lexer_tests {
     use expect_test::{expect, Expect};
 
     fn check_lexing(input: &str, expect: Expect) {
-        let actual: String = Lexer::new(input)
+        let actual: String = RawLexer::new(input)
+            .filter(|tok| match tok.kind {
+                Whitespace => false,
+                _ => true,
+            })
             .map(|token| format!("{:?}\n", token))
             .collect();
         expect.assert_eq(&actual)
@@ -177,17 +215,39 @@ mod lexer_tests {
         check_lexing(
             "x + 2 + abc * def() / 456",
             expect![[r#"
-                Ident("x")
-                BinOp(Plus)
-                Literal(Integer(2))
-                BinOp(Plus)
-                Ident("abc")
-                BinOp(Star)
-                Ident("def")
-                OpenDelim(Parenthesis)
-                CloseDelim(Parenthesis)
-                BinOp(Slash)
-                Literal(Integer(456))
+                Ident("x") [len=1]
+                BinOp(Plus) [len=1]
+                Literal(Integer(2)) [len=1]
+                BinOp(Plus) [len=1]
+                Ident("abc") [len=3]
+                BinOp(Star) [len=1]
+                Ident("def") [len=3]
+                OpenDelim(Parenthesis) [len=1]
+                CloseDelim(Parenthesis) [len=1]
+                BinOp(Slash) [len=1]
+                Literal(Integer(456)) [len=3]
+            "#]],
+        );
+    }
+
+    fn check_lexing_with_whitespace(input: &str, expect: Expect) {
+        let actual: String = RawLexer::new(input)
+            .map(|token| format!("{:?}\n", token))
+            .collect();
+        expect.assert_eq(&actual)
+    }
+    #[test]
+    fn test_whitespace() {
+        check_lexing_with_whitespace(
+            "  \t\nx +\r\n  2\n\n",
+            expect![[r#"
+                Whitespace [len=4]
+                Ident("x") [len=1]
+                Whitespace [len=1]
+                BinOp(Plus) [len=1]
+                Whitespace [len=4]
+                Literal(Integer(2)) [len=1]
+                Whitespace [len=2]
             "#]],
         );
     }

@@ -42,10 +42,10 @@ impl Interpreter {
                 let a = self.mem[a_ip.as_usize()];
                 let b = self.mem[b_ip.as_usize()];
                 match op {
-                    BinOp::Add => a + b,
-                    BinOp::Sub => a - b,
-                    BinOp::Mul => a * b,
-                    BinOp::Div => a / b,
+                    BinOpKind::Add => a + b,
+                    BinOpKind::Sub => a - b,
+                    BinOpKind::Mul => a * b,
+                    BinOpKind::Div => a / b,
                 }
             }
         }

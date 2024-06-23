@@ -1,3 +1,7 @@
+use crate::pos::ByteLen;
+use crate::span::Span;
+use std::fmt;
+
 pub use Lit::*;
 #[derive(Debug, Clone, Copy)]
 pub enum Lit {
@@ -27,9 +31,9 @@ pub enum Delimiter {
     Parenthesis,
 }
 
-pub use Token::*;
+pub use TokenKind::*;
 #[derive(Debug, Clone, Copy)]
-pub enum Token<'a> {
+pub enum TokenKind<'a> {
     /* Operators */
     BinOp(BinOpToken),
 
@@ -47,4 +51,35 @@ pub enum Token<'a> {
 
     /* End of File */
     Eof,
+    Whitespace,
+}
+
+#[derive(Clone, Copy)]
+pub struct TokenLen<'a> {
+    pub kind: TokenKind<'a>,
+    pub len: ByteLen,
+}
+
+impl<'a> TokenLen<'a> {
+    pub fn new(kind: TokenKind<'a>, len: ByteLen) -> TokenLen<'a> {
+        TokenLen { kind, len }
+    }
+}
+
+impl<'a> fmt::Debug for TokenLen<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} [len={}]", self.kind, u32::from(self.len))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Token<'a> {
+    pub kind: TokenKind<'a>,
+    pub span: Span,
+}
+
+impl<'a> Token<'a> {
+    pub fn new(kind: TokenKind<'a>, span: Span) -> Token<'a> {
+        Token { kind, span }
+    }
 }
