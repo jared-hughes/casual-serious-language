@@ -1,6 +1,5 @@
-mod lib;
 use crate::interpret::compile_and_interpret;
-pub use lib::*;
+pub use casual_serious_language::*;
 
 fn main() {
     let r = run();

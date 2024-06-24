@@ -13,10 +13,13 @@ repository = "https://github.com/jared-hughes/casual-serious-language"
 license = "MIT"
 categories = ["compilers", "command-line-utilities"]
 
+[lib]
+name = "casual_serious_language"
+
 [[bin]]
 bench = false
 path = "src/cli.rs"
-name = "casual-serious-language"
+name = "csl"
 
 [dependencies]
 index_vec = "0.1.3"

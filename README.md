@@ -35,3 +35,16 @@ To run all tests and take snapshots of what changed:
 ```sh
 ./scripts/update-snapshots.sh
 ```
+
+To run on a particular file
+
+```sh
+cargo run filename.csl
+```
+
+Alternative:
+
+```sh
+cargo build
+./target/debug/csl filename.csl
+```
