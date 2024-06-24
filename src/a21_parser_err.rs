@@ -6,7 +6,7 @@ use ParseErr::*;
 pub enum ParseErr {
     ExpectedConsequent(Span),
     OpenParenMissingCloseParen(Span),
-    NoUnaryPlusMinus(Span),
+    UnaryPlusDisallowed(Span),
     UnexpectedBinaryInitial(Span),
     UnmatchedCloseParen(Span),
     UnexpectedEOF(Span),
@@ -26,9 +26,9 @@ impl Diagnostic for ParseErr {
                 span,
                 message: format!("Expected to see a ')' here."),
             },
-            NoUnaryPlusMinus(span) => Diag {
+            UnaryPlusDisallowed(span) => Diag {
                 span,
-                message: format!("Unary '+' or '-' is not supported yet."),
+                message: format!("Leading '+' is not supported."),
             },
             UnexpectedBinaryInitial(span) => Diag {
                 span,

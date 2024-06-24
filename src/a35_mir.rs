@@ -2,7 +2,7 @@ pub use crate::ast::{
     BinOpKind,
     Lit::{self, *},
 };
-use crate::intrinsics::OP2;
+use crate::intrinsics::{OP1, OP2};
 use crate::span::Span;
 use crate::types::Type;
 use index_vec::IndexVec;
@@ -12,6 +12,7 @@ pub use InstInner::*;
 #[derive(Clone, Copy, Debug)]
 pub enum InstInner {
     Literal(Lit),
+    Unary(OP1, IP),
     Binary(OP2, IP, IP),
 }
 
@@ -89,6 +90,12 @@ impl BasicBlock {
         match inst {
             Literal(Integer(_)) => Type::I64,
             Literal(Float(_)) => Type::F64,
+            Unary(op, a) => {
+                assert!(a < ip);
+                let info = op.get_intrinsic();
+                assert!(info.param_types == self.get_type(a));
+                info.return_type
+            }
             Binary(op, a, b) => {
                 assert!(a < ip);
                 assert!(b < ip);

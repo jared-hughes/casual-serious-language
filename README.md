@@ -8,7 +8,6 @@ Reference [docs/SYNTAX.md](/docs/SYNTAX.md) for the language syntax by example.
 
 ## Next Steps
 
-- Syntax like negative
 - Try symbol/string interning
 - Figure how to type consequent parsing better. (macros?)
 - Change `/` to true division, add `//` for floor division

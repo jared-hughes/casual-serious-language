@@ -1,7 +1,7 @@
 use crate::ast::*;
 use crate::build_mir_err::BuildMIRErr;
 use crate::errors::{Diag, Diagnostic};
-use crate::intrinsics::OP2;
+use crate::intrinsics::{OP1, OP2};
 use crate::mir::{self, BasicBlock, IP};
 use crate::types::*;
 
@@ -25,14 +25,31 @@ impl Frontend {
 
     fn add_to_mir(&mut self, ex: Expr) -> Result<IP, Diag> {
         Ok(match ex.body {
+            Literal(lit) => self.block.push(mir::Literal(lit), ex.span),
+            Ident(_) => Err(BuildMIRErr::IdentifiersUnsupported(ex.span).into_diag())?,
+            Unary(op, arg_node) => {
+                let arg = self.add_to_mir(*arg_node)?;
+                self.add_unary_to_mir(op, arg)?
+            }
             Binary(op, left_node, right_node) => {
                 let left = self.add_to_mir(*left_node)?;
                 let right = self.add_to_mir(*right_node)?;
                 self.add_binary_to_mir(op, left, right)?
             }
-            Literal(lit) => self.block.push(mir::Literal(lit), ex.span),
-            Ident(_) => Err(BuildMIRErr::IdentifiersUnsupported(ex.span).into_diag())?,
         })
+    }
+
+    fn add_unary_to_mir(&mut self, op: UnaryOp, arg: IP) -> Result<IP, Diag> {
+        let arg_type = self.block.get_type(arg);
+        let op1 = match (op.node, arg_type) {
+            (Neg, I64) => OP1::NegI64,
+            (Neg, F64) => OP1::NegF64,
+            // Since the only types are i64 and f64, we can't represent an
+            // incorrectly-typed unary operation :P
+            #[allow(unreachable_patterns)]
+            (_, _) => Err(BuildMIRErr::InvalidTypeUnary(op, arg_type).into_diag())?,
+        };
+        return Ok(self.block.push(mir::Unary(op1, arg), op.span));
     }
 
     fn add_binary_to_mir(&mut self, op: BinOp, left: IP, right: IP) -> Result<IP, Diag> {

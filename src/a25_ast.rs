@@ -29,8 +29,28 @@ impl fmt::Display for BinOpKind {
 
 pub type BinOp = Spanned<BinOpKind>;
 
+pub use UnaryOpKind::*;
+#[derive(Clone, Copy, Debug)]
+pub enum UnaryOpKind {
+    /// Negation (`-`)
+    Neg,
+}
+
+impl fmt::Display for UnaryOpKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Neg => "-",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+pub type UnaryOp = Spanned<UnaryOpKind>;
+
 pub use ExprInner::*;
 pub enum ExprInner {
+    /// One-parameter operation like `-x`
+    Unary(UnaryOp, Box<Expr>),
     /// Binary operation like `a + b`
     Binary(BinOp, Box<Expr>, Box<Expr>),
     /// Literal, such as a number `1`.
@@ -55,6 +75,10 @@ impl Expr {
 impl fmt::Debug for ExprInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Unary(op, arg) => {
+                write!(f, "Unary[{op:?}]")?;
+                f.debug_tuple("").field(arg).finish()
+            }
             Self::Binary(op, left, right) => {
                 // `{:?}` never has spacing but `{:#?}` puts newlines and indents.
                 write!(f, "Binary[{op:?}]")?;

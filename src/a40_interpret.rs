@@ -2,7 +2,7 @@ use crate::build_mir::ast_to_mir;
 use crate::errors::{Diag, Diagnostic};
 use crate::mir::*;
 use crate::parser::parse;
-use crate::runtime_err::RuntimeError;
+use crate::runtime_err::{RuntimeError, RuntimeErrorInner};
 use crate::runtime_value::*;
 use index_vec::{index_vec, IndexVec};
 
@@ -32,26 +32,31 @@ impl Interpreter {
         // OR: should BasicBlock.set_return trim the vec?
         // Doesn't matter since return index is always the last index.
         for (i, inst) in program.iter().enumerate() {
-            self.mem[i] = self.eval(*inst)?;
+            self.mem[i] = self.eval(*inst).map_err(|e| {
+                RuntimeError {
+                    span: inst.span,
+                    inner: e,
+                }
+                .into_diag()
+            })?;
         }
         Ok(self.mem[program.get_return()])
     }
 
-    fn eval(&self, inst: Inst) -> RuntimeResult {
+    fn eval(&self, inst: Inst) -> Result<RuntimeValue, RuntimeErrorInner> {
         Ok(match inst.kind {
             Literal(Integer(x)) => I64(x),
             Literal(Float(x)) => F64(x),
+            Unary(op, a_ip) => {
+                let a = self.mem[a_ip];
+                let info = op.get_intrinsic();
+                (info.compute)(a)?
+            }
             Binary(op, a_ip, b_ip) => {
                 let a = self.mem[a_ip];
                 let b = self.mem[b_ip];
                 let info = op.get_intrinsic();
-                (info.compute)(a, b).map_err(|e| {
-                    RuntimeError {
-                        span: inst.span,
-                        inner: e,
-                    }
-                    .into_diag()
-                })?
+                (info.compute)(a, b)?
             }
         })
     }

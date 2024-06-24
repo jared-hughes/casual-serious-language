@@ -8,9 +8,14 @@ use std::iter::Peekable;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 enum BindingPower {
+    // Inside parens
     Top,
+    // +, -
     Add,
+    // *, /
     Mul,
+    // +, - but prefix
+    Prefix,
 }
 
 struct Parser<'a> {
@@ -72,10 +77,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_initial(&mut self) -> ExprResult {
-        let next = self.next();
-        match next.kind {
-            Literal(x) => Ok(expr(ast::Literal(x), next.span)),
-            Ident(s) => Ok(expr(ast::Ident(s.to_owned()), next.span)),
+        let start = self.next();
+        match start.kind {
+            Literal(x) => Ok(expr(ast::Literal(x), start.span)),
+            Ident(s) => Ok(expr(ast::Ident(s.to_owned()), start.span)),
             OpenDelim(Parenthesis) => {
                 let inner = self.parse_main(BindingPower::Top)?;
                 let close_paren = self.next();
@@ -85,12 +90,20 @@ impl<'a> Parser<'a> {
                     return Err(ParseErr::OpenParenMissingCloseParen(close_paren.span).into_diag());
                 }
             }
-            BinOp(Plus) | BinOp(Minus) => Err(ParseErr::NoUnaryPlusMinus(next.span).into_diag()),
-            BinOp(_) => Err(ParseErr::UnexpectedBinaryInitial(next.span).into_diag()),
-            CloseDelim(Parenthesis) => Err(ParseErr::UnmatchedCloseParen(next.span).into_diag()),
-            Eof => Err(ParseErr::UnexpectedEOF(next.span).into_diag()),
+            BinOp(Plus) => {
+                return Err(ParseErr::UnaryPlusDisallowed(start.span).into_diag());
+            }
+            BinOp(Minus) => {
+                let inner = self.parse_main(BindingPower::Prefix)?;
+                let unop = respan(ast::UnaryOpKind::Neg, start.span);
+                let s = span(start.span.lo, inner.span.hi);
+                Ok(expr(ast::Unary(unop, inner), s))
+            }
+            BinOp(_) => Err(ParseErr::UnexpectedBinaryInitial(start.span).into_diag()),
+            CloseDelim(Parenthesis) => Err(ParseErr::UnmatchedCloseParen(start.span).into_diag()),
+            Eof => Err(ParseErr::UnexpectedEOF(start.span).into_diag()),
             Whitespace => panic!("Whitespace should be skipped"),
-            Invalid(x) => Err(ParseErr::InvalidToken(next.span, x).into_diag()),
+            Invalid(x) => Err(ParseErr::InvalidToken(start.span, x).into_diag()),
         }
     }
 
@@ -118,8 +131,9 @@ impl<'a> Parser<'a> {
 
     fn parse_binop(&mut self, left: Bexpr, tok: BinOpToken, sp: Span) -> ExprResult {
         let right = self.parse_main(binop_power(tok))?;
+        let binop = respan(translate_binop(tok), sp);
         let s = span(left.span.lo, right.span.hi);
-        return Ok(expr(ast::Binary(translate_binop(tok, sp), left, right), s));
+        return Ok(expr(ast::Binary(binop, left, right), s));
     }
 }
 
@@ -130,14 +144,13 @@ fn binop_power(t: BinOpToken) -> BindingPower {
     }
 }
 
-fn translate_binop(t: BinOpToken, sp: Span) -> ast::BinOp {
-    let kind = match t {
+fn translate_binop(t: BinOpToken) -> ast::BinOpKind {
+    match t {
         Plus => ast::Add,
         Minus => ast::Sub,
         Star => ast::Mul,
         Slash => ast::Div,
-    };
-    respan(kind, sp)
+    }
 }
 
 #[cfg(test)]
@@ -196,6 +209,58 @@ mod parser_tests {
     }
 
     #[test]
+    fn unary() {
+        check_parsing("+x", expect!["At 1: Leading '+' is not supported."]);
+        check_parsing(
+            "-x",
+            expect![[r#"
+                (1-2)Unary[Neg(1)](
+                    (2)Ident("x"),
+                )"#]],
+        );
+        check_parsing(
+            "-x+3",
+            expect![[r#"
+                (1-4)Binary[Add(3)](
+                    (1-2)Unary[Neg(1)](
+                        (2)Ident("x"),
+                    ),
+                    (4)Literal(Integer(3)),
+                )"#]],
+        );
+        check_parsing(
+            "-x*3",
+            expect![[r#"
+                (1-4)Binary[Mul(3)](
+                    (1-2)Unary[Neg(1)](
+                        (2)Ident("x"),
+                    ),
+                    (4)Literal(Integer(3)),
+                )"#]],
+        );
+        check_parsing(
+            "3*-x",
+            expect![[r#"
+                (1-4)Binary[Mul(2)](
+                    (1)Literal(Integer(3)),
+                    (3-4)Unary[Neg(3)](
+                        (4)Ident("x"),
+                    ),
+                )"#]],
+        );
+        check_parsing(
+            "3--x",
+            expect![[r#"
+                (1-4)Binary[Sub(2)](
+                    (1)Literal(Integer(3)),
+                    (3-4)Unary[Neg(3)](
+                        (4)Ident("x"),
+                    ),
+                )"#]],
+        );
+    }
+
+    #[test]
     fn smoke_test() {
         check_parsing(
             "x + (2 + abc) * def / 456",
@@ -223,7 +288,11 @@ mod parser_tests {
             "/",
             expect!["At 1: Unexpected binary operator in initial position."],
         );
-        check_parsing("+", expect!["At 1: Unary '+' or '-' is not supported yet."]);
+        check_parsing("+", expect!["At 1: Leading '+' is not supported."]);
+        check_parsing(
+            "-",
+            expect!["At (!2,2!): Hold your horses. An EOF already?"],
+        );
         check_parsing(
             "x+",
             expect!["At (!3,3!): Hold your horses. An EOF already?"],
@@ -253,9 +322,6 @@ mod parser_tests {
 
     #[test]
     fn error_token_in_special() {
-        check_parsing(
-            "(x++",
-            expect!["At 4: Unary '+' or '-' is not supported yet."],
-        );
+        check_parsing("(x++", expect!["At 4: Leading '+' is not supported."]);
     }
 }
