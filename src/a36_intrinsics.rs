@@ -10,28 +10,10 @@ pub struct Intrinsic1 {
     pub compute: fn(RuntimeValue) -> FunctionResult,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum OP1 {
-    NegI64,
-    NegF64,
-}
-
 pub struct Intrinsic2 {
     pub param_types: (Type, Type),
     pub return_type: Type,
     pub compute: fn(RuntimeValue, RuntimeValue) -> FunctionResult,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum OP2 {
-    AddI64,
-    SubI64,
-    MulI64,
-    DivI64,
-    AddF64,
-    SubF64,
-    MulF64,
-    DivF64,
 }
 
 macro_rules! def_int {
@@ -43,6 +25,11 @@ macro_rules! def_int {
                 $body:block
         )+
     ) => {
+        #[derive(Clone, Copy, Debug)]
+        pub enum $OP {
+            $($op),*
+        }
+
         impl $OP {
             // Lookup into the functions
             pub fn get_intrinsic(self) -> $Intrinsic {
