@@ -15,7 +15,7 @@ impl RuntimeValue {
     pub fn to_type(&self) -> Type {
         match self {
             I64(_) => Type::I64,
-            F64(_) => Type::I64,
+            F64(_) => Type::F64,
         }
     }
 }

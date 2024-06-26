@@ -2,21 +2,31 @@ pub use crate::ast::{
     BinOpKind,
     Lit::{self, *},
 };
-use crate::intrinsics::{OP1, OP2};
-use crate::span::Span;
+use crate::build_mir_err::BuildMIRErr as ME;
+use crate::errors::{Diag, Diagnostic};
+use crate::span::{Span, DUMMY_SPAN};
 use crate::types::Type;
+use crate::{
+    build_mir::FunctionParam,
+    intrinsics::{OP1, OP2},
+};
 use index_vec::IndexVec;
+use std::collections::HashMap;
 use std::fmt;
 
 pub use InstInner::*;
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum InstInner {
+    /// Basic block argument: if this is the `i`th instruction of the basic
+    /// block, then load argument number `i`.
+    LoadArg(Type),
     Literal(Lit),
     Unary(OP1, IP),
     Binary(OP2, IP, IP),
+    FnCall(String, Vec<IP>, Type),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Inst {
     pub kind: InstInner,
     pub value_type: Type,
@@ -26,6 +36,32 @@ pub struct Inst {
 impl fmt::Debug for Inst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {:?}", self.value_type, self.kind)
+    }
+}
+
+pub struct Program {
+    pub fns: HashMap<String, BasicBlock>,
+}
+
+impl Program {
+    pub fn new() -> Program {
+        Program {
+            fns: HashMap::new(),
+        }
+    }
+}
+
+impl fmt::Debug for Program {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut fns = self.fns.iter().collect::<Vec<_>>();
+        fns.sort_by_key(|x| x.0);
+        for (i, (fn_name, block)) in fns.into_iter().enumerate() {
+            write!(f, "fn {fn_name} {block:#?}")?;
+            if i != self.fns.len() - 1 {
+                writeln!(f, "")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -39,25 +75,30 @@ index_vec::define_index_type! {
 
 #[derive(Clone)]
 pub struct BasicBlock {
+    pub params: Vec<Type>,
+    symbol_table: HashMap<String, IP>,
     vec: IndexVec<IP, Inst>,
     return_index: IP,
 }
 
-// impl Index<IP> for BasicBlock {
-//     type Output = Inst;
-
-//     #[inline(always)]
-//     fn index(&self, i: IP) -> &Self::Output {
-//         &self.vec[i]
-//     }
-// }
-
 impl BasicBlock {
-    pub fn new() -> BasicBlock {
-        BasicBlock {
+    pub fn new(params: Vec<FunctionParam>) -> Result<BasicBlock, Diag> {
+        let mut block = BasicBlock {
+            params: params.iter().map(|x| x.param_type).collect(),
+            symbol_table: HashMap::new(),
             vec: IndexVec::new(),
             return_index: IP::from_usize(0),
+        };
+        for p in params {
+            let name = p.name.name.to_string();
+            let ip = block.push(LoadArg(p.param_type), p.name.span);
+            if let Some(..) = block.symbol_table.get(&name) {
+                // TODO: Proper span for this duplicate parameter
+                Err(ME::DuplicateParameter(DUMMY_SPAN, name.to_owned()).into_diag())?;
+            }
+            block.symbol_table.insert(name, ip);
         }
+        return Ok(block);
     }
 
     pub fn set_return(&mut self, ip: IP) {
@@ -72,7 +113,7 @@ impl BasicBlock {
     pub fn push(&mut self, inst: InstInner, span: Span) -> IP {
         let ind = self.vec.len();
         let ip = IP::from_usize(ind);
-        let value_type = self.compute_type(inst, ip);
+        let value_type = self.compute_type(&inst, ip);
         self.vec.push(Inst {
             kind: inst,
             value_type,
@@ -86,8 +127,9 @@ impl BasicBlock {
     }
 
     /// Compute the return type of the instruction, and do basic sanity checks.
-    fn compute_type(&self, inst: InstInner, ip: IP) -> Type {
-        match inst {
+    fn compute_type(&self, inst: &InstInner, ip: IP) -> Type {
+        match *inst {
+            LoadArg(ty) => ty,
             Literal(Integer(_)) => Type::I64,
             Literal(Float(_)) => Type::F64,
             Unary(op, a) => {
@@ -104,6 +146,12 @@ impl BasicBlock {
                 assert!(info.param_types.1 == self.get_type(b));
                 info.return_type
             }
+            FnCall(_, ref args, value_type) => {
+                for a in args {
+                    assert!(a < &ip);
+                }
+                value_type
+            }
         }
     }
 
@@ -113,6 +161,10 @@ impl BasicBlock {
 
     pub fn iter(&self) -> core::slice::Iter<'_, Inst> {
         self.vec.iter()
+    }
+
+    pub fn get_symbol(&self, symb: &str) -> Option<IP> {
+        self.symbol_table.get(symb).cloned()
     }
 }
 

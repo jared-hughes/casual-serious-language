@@ -8,6 +8,11 @@ pub struct Span {
     pub hi: BytePos,
 }
 
+pub const DUMMY_SPAN: Span = Span {
+    lo: BytePos(0),
+    hi: BytePos(0),
+};
+
 impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.hi - self.lo == ByteLen(1) {

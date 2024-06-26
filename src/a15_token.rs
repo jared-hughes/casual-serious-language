@@ -29,6 +29,8 @@ pub use Delimiter::*;
 pub enum Delimiter {
     /// `( ... )`
     Parenthesis,
+    /// `{ ... }`
+    CurlyBrace,
 }
 
 pub use TokenKind::*;
@@ -42,6 +44,20 @@ pub enum TokenKind<'a> {
     OpenDelim(Delimiter),
     /// A closing delimiter, like `)`.
     CloseDelim(Delimiter),
+    /// ';'
+    Semi,
+    /// ':'
+    Colon,
+    /// ','
+    Comma,
+    /// '->'
+    ThinArrow,
+
+    /* Keywords */
+    /// 'fn'
+    KwFn,
+    /// 'ret'
+    KwRet,
 
     /* Atoms */
     /// Literal number

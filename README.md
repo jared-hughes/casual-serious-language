@@ -8,10 +8,16 @@ Reference [docs/SYNTAX.md](/docs/SYNTAX.md) for the language syntax by example.
 
 ## Next Steps
 
-- Try symbol/string interning
 - Figure how to type consequent parsing better. (macros?)
+- Web preview: compile to wasm, and run in-browser.
+  - Consider global `std::panic::set_hook` https://doc.rust-lang.org/beta/std/panic/fn.set_hook.html
+- Compile portions of the code better (don't stop on the first err, allow for error nodes / IPs)
+- `let` and better Symbol table handling (ugly inside `a35_mir` rn.)
+- Find some way to guarantee all error messages are tested.
+  - Panic for runtime errors instead of propagating `Result`.
+- Generalize scanning for comma-separated things (function params, function args).
+- Try symbol/string interning
 - Change `/` to true division, add `//` for floor division
-- Functions
 
 Maybe sometime: Compile instead of interpret
 

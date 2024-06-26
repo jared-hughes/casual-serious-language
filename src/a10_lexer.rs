@@ -134,26 +134,44 @@ impl<'a> RawLexer<'a> {
                 Whitespace
             }
 
-            c if is_id_start(c) => {
-                self.eat_while(is_id_continue);
-                Ident(self.slice())
-            }
+            c if is_id_start(c) => self.ident(),
 
             // Numeric literal.
             '0'..='9' => self.number(),
 
             '+' => BinOp(Plus),
-            '-' => BinOp(Minus),
+            '-' => match self.peek() {
+                '>' => {
+                    self.consume();
+                    ThinArrow
+                }
+                _ => BinOp(Minus),
+            },
             '*' => BinOp(Star),
             '/' => BinOp(Slash),
             '(' => OpenDelim(Parenthesis),
             ')' => CloseDelim(Parenthesis),
+            '{' => OpenDelim(CurlyBrace),
+            '}' => CloseDelim(CurlyBrace),
+            ',' => Comma,
+            ':' => Colon,
+            ';' => Semi,
 
             c => panic!("Crazy character '{}'.", c),
         };
         let len = self.len();
         self.chars_token_start = self.chars.clone();
         TokenLen::new(kind, len)
+    }
+
+    fn ident(&mut self) -> TokenKind<'a> {
+        self.eat_while(is_id_continue);
+        let s = self.slice();
+        match () {
+            () if s == "fn" => KwFn,
+            () if s == "ret" => KwRet,
+            _ => Ident(s),
+        }
     }
 
     fn number(&mut self) -> TokenKind<'a> {
@@ -369,6 +387,60 @@ mod lexer_tests {
             expect![[r#"
             Invalid(InvalidToken { msg: "Need at least one digit after 'e'." }) [len=5]
         "#]],
+        );
+    }
+
+    #[test]
+    fn symbols() {
+        check_lexing(
+            "+ - -> * / ( ) { } , : ;",
+            expect![[r#"
+                BinOp(Plus) [len=1]
+                BinOp(Minus) [len=1]
+                ThinArrow [len=2]
+                BinOp(Star) [len=1]
+                BinOp(Slash) [len=1]
+                OpenDelim(Parenthesis) [len=1]
+                CloseDelim(Parenthesis) [len=1]
+                OpenDelim(CurlyBrace) [len=1]
+                CloseDelim(CurlyBrace) [len=1]
+                Comma [len=1]
+                Colon [len=1]
+                Semi [len=1]
+            "#]],
+        );
+        check_lexing(
+            "(-x)/{},:;->-+():1",
+            expect![[r#"
+                OpenDelim(Parenthesis) [len=1]
+                BinOp(Minus) [len=1]
+                Ident("x") [len=1]
+                CloseDelim(Parenthesis) [len=1]
+                BinOp(Slash) [len=1]
+                OpenDelim(CurlyBrace) [len=1]
+                CloseDelim(CurlyBrace) [len=1]
+                Comma [len=1]
+                Colon [len=1]
+                Semi [len=1]
+                ThinArrow [len=2]
+                BinOp(Minus) [len=1]
+                BinOp(Plus) [len=1]
+                OpenDelim(Parenthesis) [len=1]
+                CloseDelim(Parenthesis) [len=1]
+                Colon [len=1]
+                Literal(Integer(1)) [len=1]
+            "#]],
+        );
+    }
+
+    #[test]
+    fn keywords() {
+        check_lexing(
+            "fn ret",
+            expect![[r#"
+                KwFn [len=2]
+                KwRet [len=3]
+            "#]],
         );
     }
 

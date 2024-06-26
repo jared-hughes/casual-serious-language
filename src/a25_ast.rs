@@ -47,6 +47,30 @@ impl fmt::Display for UnaryOpKind {
 
 pub type UnaryOp = Spanned<UnaryOpKind>;
 
+#[derive(Clone, Debug)]
+pub struct Ident {
+    pub name: String,
+    pub span: Span,
+}
+
+impl fmt::Display for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+pub struct FunctionParam {
+    pub name: Ident,
+    pub param_type: Ident,
+}
+
+pub struct FunctionDefinition {
+    pub fn_name: Ident,
+    pub params: Vec<FunctionParam>,
+    pub body: Vec<Expr>,
+    pub return_type: Ident,
+}
+
 pub use ExprInner::*;
 pub enum ExprInner {
     /// One-parameter operation like `-x`
@@ -59,6 +83,14 @@ pub enum ExprInner {
     // TODO: store these as indexes to learn about interning and arenas
     // See Rust's InternerInner in rustc_span.
     Ident(String),
+    /// Function definition
+    FnDefinition(FunctionDefinition),
+    /// Return with unchanged control flow, `ret x;`
+    Ret(Span, Box<Expr>),
+    /// Parenthesized expression `(x)`.
+    Paren(Box<Expr>),
+    /// Function call `f(x,y,z)`
+    FnCall(Box<Expr>, Vec<Expr>),
 }
 
 pub struct Expr {
@@ -75,17 +107,41 @@ impl Expr {
 impl fmt::Debug for ExprInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unary(op, arg) => {
+            Unary(op, arg) => {
                 write!(f, "Unary[{op:?}]")?;
                 f.debug_tuple("").field(arg).finish()
             }
-            Self::Binary(op, left, right) => {
+            Binary(op, left, right) => {
                 // `{:?}` never has spacing but `{:#?}` puts newlines and indents.
                 write!(f, "Binary[{op:?}]")?;
                 f.debug_tuple("").field(left).field(right).finish()
             }
-            Self::Literal(x) => write!(f, "Literal({x:?})"),
-            Self::Ident(x) => write!(f, "Ident({x:?})"),
+            Literal(x) => write!(f, "Literal({x:?})"),
+            Ident(x) => write!(f, "Ident({x:?})"),
+            FnDefinition(def) => {
+                write!(f, "FnDefinition[{}](", def.fn_name)?;
+                for (i, p) in (&def.params).into_iter().enumerate() {
+                    write!(f, "{}: {}", p.name, p.param_type)?;
+                    if i < def.params.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, ") ")?;
+                f.debug_set().entries(&def.body).finish()
+            }
+            Ret(span, arg) => {
+                write!(f, "ret({:?}) ", span)?;
+                f.debug_tuple("").field(arg).finish()
+            }
+            Paren(arg) => write!(f, "paren@{:#?}", arg),
+            FnCall(fun, args) => {
+                write!(f, "call({:?})", fun)?;
+                let mut tup = f.debug_tuple("");
+                for arg in args {
+                    tup.field(arg);
+                }
+                tup.finish()
+            }
         }
     }
 }
@@ -93,5 +149,18 @@ impl fmt::Debug for ExprInner {
 impl fmt::Debug for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({:?}){:#?}", self.span, self.body)
+    }
+}
+
+pub struct Program {
+    pub body: Vec<Expr>,
+}
+
+impl fmt::Debug for Program {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for stmt in &self.body {
+            writeln!(f, "{:?}", stmt)?;
+        }
+        Ok(())
     }
 }

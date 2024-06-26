@@ -29,6 +29,14 @@ use RuntimeErrorInner::*;
 pub enum RuntimeErrorInner {
     TypeAssertionFailedBinary(TypeAssertionFailedBinary),
     TypeAssertionFailedUnary(TypeAssertionFailedUnary),
+    MissingFunction(String),
+    IncorrectArgs(String),
+}
+
+impl RuntimeErrorInner {
+    pub fn span(self, span: Span) -> Diag {
+        RuntimeError { inner: self, span }.into_diag()
+    }
 }
 
 pub struct RuntimeError {
@@ -50,6 +58,15 @@ impl Diagnostic for RuntimeError {
                 x.args.0.to_type(),
                 x.args.1.to_type()
             ),
+            MissingFunction(name) => {
+                format!(
+                    "Function '{name}' is not defined. \
+                    Try `fn main() -> i64 {{ ret 1 + 2; }}`"
+                )
+            }
+            IncorrectArgs(name) => {
+                format!("Incorrect args to function '{name}")
+            }
         };
         return Diag {
             span: self.span,
