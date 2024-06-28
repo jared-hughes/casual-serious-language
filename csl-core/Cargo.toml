@@ -1,12 +1,11 @@
 [package]
-name = "casual-serious-language"
+name = "casual_serious_language"
 version = "0.1.0"
 edition = "2021"
 authors = ["Jared Hughes <jahughes241@gmail.com>"]
 description = """
-A casual attempt at a serious programming language.
+A casual attempt at a serious programming language. (Compiler crate)
 """
-readme = "README.md"
 documentation = "https://github.com/jared-hughes/casual-serious-language"
 homepage = "https://github.com/jared-hughes/casual-serious-language"
 repository = "https://github.com/jared-hughes/casual-serious-language"
@@ -15,11 +14,6 @@ categories = ["compilers", "command-line-utilities"]
 
 [lib]
 name = "casual_serious_language"
-
-[[bin]]
-bench = false
-path = "src/cli.rs"
-name = "csl"
 
 [dependencies]
 index_vec = "0.1.3"

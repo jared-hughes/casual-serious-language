@@ -1,0 +1,22 @@
+[package]
+name = "casual_serious_language_cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jared Hughes <jahughes241@gmail.com>"]
+description = """
+A casual attempt at a serious programming language. (CLI Compiler)
+"""
+documentation = "https://github.com/jared-hughes/casual-serious-language"
+homepage = "https://github.com/jared-hughes/casual-serious-language"
+repository = "https://github.com/jared-hughes/casual-serious-language"
+license = "MIT"
+categories = ["compilers", "command-line-utilities"]
+
+[[bin]]
+bench = false
+path = "src/cli.rs"
+name = "csl"
+
+[dependencies.casual_serious_language]
+path = "../csl-core"
+version = "0.1.0"
