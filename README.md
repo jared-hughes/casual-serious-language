@@ -50,7 +50,16 @@ cd csl-cli
 cargo run filename.csl
 ```
 
-To build for web:
+## Build for Web
+
+Install only needs to be run once:
+
+```sh
+cd site
+npm install
+```
+
+To build for web,
 
 ```sh
 ./build-site.sh
