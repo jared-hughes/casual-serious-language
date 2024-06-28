@@ -543,7 +543,13 @@ mod build_mir_functions {
         );
         check_build_mir(
             "fn f(x: i64, y: i64) -> i64 { ret f(x,1.0); };",
-            expect!["At 35-42: Function 'f' expected an argument of type 'f64' here, but you passed in 'i64'"],
+            expect!["At 35-42: Function 'f' expected an argument of type 'i64' here, but you passed in 'f64'"],
+        );
+        check_build_mir(
+            "fn f(x: i64) -> f64 { ret x; };",
+            expect![
+                "At 27: Expected function 'f' to return type 'f64', but it returned type 'i64'"
+            ],
         );
         check_build_mir(
             "fn f(x: i64, y: i64) -> I64 { ret 1; };",

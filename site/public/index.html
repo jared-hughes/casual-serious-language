@@ -2,15 +2,17 @@
 <html lang="en-US">
   <head>
     <meta charset="utf-8" />
-    <title>hello-wasm example</title>
+    <title>Casual Serious Language (CSL)</title>
   </head>
   <body>
-    <form action="javascript:;" id="name-form">
-      <label for="name">Name:</label>
-      <input id="name" name="name" />
+    <form action="javascript:;">
+      <label for="src">Casual Serious Language (CSL) source:</label>
+      <br />
+      <textarea id="src" name="src" required rows="12" cols="60"> </textarea>
       <br />
       <input type="submit" value="Submit" />
     </form>
+    <pre id="output"></pre>
     <script type="module" src="./js/main.js"></script>
   </body>
 </html>

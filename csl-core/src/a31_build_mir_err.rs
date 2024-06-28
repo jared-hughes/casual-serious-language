@@ -126,7 +126,7 @@ impl Diagnostic for BuildMIRErr {
                 message: format!(
                     "Function '{}' expected an argument of type '{}' here, \
                     but you passed in '{}'",
-                    fn_name, actual, expected
+                    fn_name, expected, actual
                 ),
             },
             WrongReturnType(span, fn_name, actual, expected) => Diag {
@@ -134,7 +134,7 @@ impl Diagnostic for BuildMIRErr {
                 message: format!(
                     "Expected function '{}' to return type '{}', \
                     but it returned type '{}'",
-                    fn_name, actual, expected
+                    fn_name, expected, actual
                 ),
             },
             DuplicateParameter(span, name) => Diag {

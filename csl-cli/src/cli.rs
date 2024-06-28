@@ -1,5 +1,4 @@
-use crate::interpret::compile_and_interpret;
-pub use casual_serious_language::*;
+use casual_serious_language::compile_and_interpret;
 
 fn main() {
     let r = run();

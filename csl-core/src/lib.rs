@@ -1,3 +1,5 @@
+pub use interpret::compile_and_interpret;
+
 #[path = "a25_ast.rs"]
 pub mod ast;
 #[path = "a30_build_mir.rs"]
