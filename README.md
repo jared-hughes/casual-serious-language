@@ -39,18 +39,25 @@ The WIP is so far from these actually being relevant:
 To run all tests and take snapshots of what changed:
 
 ```sh
+cd csl-core
 ./scripts/update-snapshots.sh
 ```
 
 To run on a particular file
 
 ```sh
+cd csl-cli
 cargo run filename.csl
 ```
 
-Alternative:
+To build for web:
 
 ```sh
-cargo build
-./target/debug/csl filename.csl
+./build-site.sh
+```
+
+Then serve the files in public-deploy. I like doing
+
+```sh
+./build-site.sh && python3 -m http.server -d public-deploy/
 ```

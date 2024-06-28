@@ -1,0 +1,10 @@
+{
+  "name": "casual-serious-language-site",
+  "version": "0.1.0",
+  "private": true,
+  "devDependencies": {
+    "esbuild": "^0.21.5"
+  },
+  "author": "Jared Hughes",
+  "license": "MIT"
+}
