@@ -158,7 +158,8 @@ impl<'a> RawLexer<'a> {
             ';' => Semi,
             '=' => Equals,
 
-            c => panic!("Crazy character '{}'.", c),
+            // TODO: actually say what the character is.
+            _ => invalid("Unrecognized character."),
         };
         let len = self.len();
         self.chars_token_start = self.chars.clone();
@@ -388,6 +389,12 @@ mod lexer_tests {
             "1.0e-",
             expect![[r#"
             Invalid(InvalidToken { msg: "Need at least one digit after 'e'." }) [len=5]
+        "#]],
+        );
+        check_lexing(
+            "@",
+            expect![[r#"
+            Invalid(InvalidToken { msg: "Unrecognized character." }) [len=1]
         "#]],
         );
     }
