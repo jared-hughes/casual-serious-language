@@ -1,7 +1,7 @@
 use crate::ast;
-use crate::errors::Diag;
+use crate::errors::{Diag, Diagnostic};
 use crate::lexer::Lexer;
-use crate::parser_err::ParseErrKind as PE;
+use crate::parser_err as PE;
 use crate::span::{respan, span, Span};
 use crate::token::*;
 use std::iter::Peekable;
@@ -36,6 +36,10 @@ pub fn parse(input: &str) -> ProgramResult {
     Parser::new(input).parse()
 }
 
+fn err<T>(x: impl Diagnostic) -> Result<T, Diag> {
+    Err(x.into_diag())
+}
+
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Parser<'a> {
         Parser {
@@ -52,7 +56,7 @@ impl<'a> Parser<'a> {
     pub fn assert_stream_done(&mut self) -> Result<(), Diag> {
         let tok = self.peek()?;
         let Eof = tok.kind else {
-            Err(PE::ExpectedConsequent.span(tok.span))?
+            err(PE::ExpectedConsequent.span(tok.span))?
         };
         Ok(())
     }
@@ -76,7 +80,7 @@ impl<'a> Parser<'a> {
 
 fn preprocess<'a>(tok: Token<'a>) -> Result<Token<'a>, Diag> {
     match tok.kind {
-        Invalid(x) => Err(PE::InvalidToken(x).span(tok.span)),
+        Invalid(x) => err(PE::InvalidToken { token: x }.span(tok.span)),
         _ => Ok(tok),
     }
 }
@@ -85,7 +89,7 @@ macro_rules! consume_token {
     ($self:ident, $tok:pat, $err:expr) => {{
         let next = $self.next()?;
         let $tok = next.kind else {
-            return Err($err.span(next.span));
+            return err($err.span(next.span));
         };
         next
     }};
@@ -95,7 +99,7 @@ macro_rules! consume_ident {
     ($self:ident, $err:expr) => {{
         let next = $self.next()?;
         let Ident(name) = next.kind else {
-            return Err($err.span(next.span));
+            return err($err.span(next.span));
         };
         ast::Ident {
             name: name.to_owned(),
@@ -193,7 +197,7 @@ impl<'a> Parser<'a> {
                 Ok(expr(ast::Ret(start.span, inner), s))
             }
             BinOp(Plus) => {
-                return Err(PE::UnaryPlusDisallowed.span(start.span));
+                return err(PE::UnaryPlusDisallowed.span(start.span));
             }
             BinOp(Minus) => {
                 let inner = self.parse_main(BindingPower::Prefix)?;
@@ -201,9 +205,9 @@ impl<'a> Parser<'a> {
                 let s = span(start.span.lo, inner.span.hi);
                 Ok(expr(ast::Unary(unop, inner), s))
             }
-            BinOp(_) => Err(PE::UnexpectedBinaryInitial.span(start.span)),
-            CloseDelim(Parenthesis) => Err(PE::UnmatchedCloseParen.span(start.span)),
-            Eof => Err(PE::UnexpectedEOF.span(start.span)),
+            BinOp(_) => err(PE::UnexpectedBinaryInitial.span(start.span)),
+            CloseDelim(Parenthesis) => err(PE::UnmatchedCloseParen.span(start.span)),
+            Eof => err(PE::UnexpectedEOF.span(start.span)),
             Whitespace | Invalid(_) => panic!("Whitespace should be skipped"),
             OpenDelim(CurlyBrace)
             | CloseDelim(CurlyBrace)
@@ -211,7 +215,7 @@ impl<'a> Parser<'a> {
             | Comma
             | ThinArrow
             | Semi
-            | Equals => Err(PE::GeneralUnexpected.span(start.span)),
+            | Equals => err(PE::GeneralUnexpected.span(start.span)),
             KwFn => self.parse_fn(start),
             KwLet => self.parse_let(start),
         }
@@ -261,7 +265,7 @@ impl<'a> Parser<'a> {
         // disallow f(,)
         let after_open_paren = self.peek()?;
         if let Comma = after_open_paren.kind {
-            return Err(PE::FnBadComma.span(after_open_paren.span));
+            return err(PE::FnBadComma.span(after_open_paren.span));
         }
         // main loop
         while !terminates_fn_params(self.peek()?.kind) {
@@ -283,21 +287,21 @@ impl<'a> Parser<'a> {
     fn parse_fn(&mut self, fn_token: Token) -> ExprResult {
         let fn_name = consume_ident!(self, PE::FnExpectedName);
         // (
-        consume_token!(self, OpenDelim(Parenthesis), PE::FnExpOpenParen(fn_name));
+        consume_token!(self, OpenDelim(Parenthesis), PE::FnExpOpenParen { fn_name });
         let mut params: Vec<ast::FunctionParam> = vec![];
         // disallow f(,)
         let after_open_paren = self.peek()?;
         if let Comma = after_open_paren.kind {
-            return Err(PE::FnBadComma.span(after_open_paren.span));
+            return err(PE::FnBadComma.span(after_open_paren.span));
         }
         // main loop
         while !terminates_fn_params(self.peek()?.kind) {
             // x
-            let param = consume_ident!(self, PE::FnExpParameter(fn_name));
+            let param = consume_ident!(self, PE::FnExpParameter { fn_name });
             // :
-            consume_token!(self, Colon, PE::FnExpColon(fn_name, param));
+            consume_token!(self, Colon, PE::FnExpColon { fn_name, param });
             // i64
-            let type_name = consume_ident!(self, PE::FnExpParamType(fn_name, param));
+            let type_name = consume_ident!(self, PE::FnExpParamType { fn_name, param });
             // , or )
             let after_param = self.peek()?;
             // Don't need comma ',' if next token is ')'
@@ -311,18 +315,25 @@ impl<'a> Parser<'a> {
             });
         }
         // )
-        consume_token!(self, CloseDelim(Parenthesis), PE::FnExpCloseParen(fn_name));
+        consume_token!(
+            self,
+            CloseDelim(Parenthesis),
+            PE::FnExpCloseParen { fn_name }
+        );
         // ->
-        consume_token!(self, ThinArrow, PE::FnExpThinArrow(fn_name));
+        consume_token!(self, ThinArrow, PE::FnExpThinArrow { fn_name });
         // i64
-        let return_type = consume_ident!(self, PE::FnExpReturnType(fn_name));
+        let return_type = consume_ident!(self, PE::FnExpReturnType { fn_name });
         // {
-        consume_token!(self, OpenDelim(CurlyBrace), PE::FnExpOpenCurly(fn_name));
+        consume_token!(self, OpenDelim(CurlyBrace), PE::FnExpOpenCurly { fn_name });
         // ret x * 2;
         let body = self.parse_stmts()?;
         // }
-        let close_curly =
-            consume_token!(self, CloseDelim(CurlyBrace), PE::FnExpCloseCurly(fn_name));
+        let close_curly = consume_token!(
+            self,
+            CloseDelim(CurlyBrace),
+            PE::FnExpCloseCurly { fn_name }
+        );
         return Ok(expr(
             ast::FnDefinition(ast::FunctionDefinition {
                 fn_name,
@@ -338,7 +349,7 @@ impl<'a> Parser<'a> {
         // x
         let ident = consume_ident!(self, PE::FnExpectedName);
         // =
-        consume_token!(self, Equals, PE::LetExpEquals(ident));
+        consume_token!(self, Equals, PE::LetExpEquals { ident });
         // y * 2
         let init = self.parse_main(BindingPower::Top)?;
         let s = span(let_token.span.lo, init.span.hi);
@@ -640,14 +651,9 @@ mod parser_expr_tests {
         );
         check_parsing(
             "let x",
-            expect!["At (!6,6!): Expected '=' to provide an initial value for 'x'. For example: `let x = 5;`"],
+            expect!["At (!6,6!): Expected an '=', to provide an initial value for 'x'. For example: `let x = 5;`"],
         );
-        check_parsing(
-            "let x 5",
-            expect![
-                "At 7: Expected '=' to provide an initial value for 'x'. For example: `let x = 5;`"
-            ],
-        );
+        check_parsing("let x 5", expect!["At 7: Expected an '=', to provide an initial value for 'x'. For example: `let x = 5;`"]);
         check_parsing(
             "let x =",
             expect!["At (!8,8!): Hold your horses. An EOF already?"],

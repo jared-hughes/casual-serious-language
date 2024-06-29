@@ -2,7 +2,7 @@ pub use crate::ast::{
     BinOpKind,
     Lit::{self, *},
 };
-use crate::build_mir_err::BuildMIRErr as ME;
+use crate::build_mir_err as ME;
 use crate::errors::{Diag, Diagnostic};
 use crate::span::{Span, DUMMY_SPAN};
 use crate::types::Type;
@@ -94,7 +94,11 @@ impl BasicBlock {
             let ip = block.push(LoadArg(p.param_type), p.name.span);
             if let Some(..) = block.symbol_table.get(&name) {
                 // TODO: Proper span for this duplicate parameter
-                Err(ME::DuplicateParameter(DUMMY_SPAN, name.to_owned()).into_diag())?;
+                Err(ME::DuplicateParameter {
+                    span: DUMMY_SPAN,
+                    name: name.to_owned(),
+                }
+                .into_diag())?;
             }
             block.symbol_table.insert(name, ip);
         }

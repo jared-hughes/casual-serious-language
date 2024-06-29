@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::iter::zip;
 
 use crate::ast::*;
-use crate::build_mir_err::{ArgCountWrong, BuildMIRErr as ME};
+use crate::build_mir_err::{self as ME, ArgCountWrong};
 use crate::errors::{Diag, Diagnostic};
 use crate::intrinsics::{OP1, OP2};
 use crate::mir::{self, BasicBlock, IP};
@@ -22,6 +22,10 @@ struct FnSignature {
     return_type: Type,
 }
 
+fn err<T>(x: impl Diagnostic) -> Result<T, Diag> {
+    Err(x.into_diag())
+}
+
 struct Ctx {
     mir_program: mir::Program,
     fn_table: HashMap<String, FnSignature>,
@@ -33,7 +37,12 @@ impl Ctx {
         Ok(match ty.name.as_str() {
             "i64" => Type::I64,
             "f64" => Type::F64,
-            _ => return Err(ME::UnrecognizedTypeName(ty.span, ty.name.clone()).into_diag()),
+            _ => {
+                return err(ME::UnrecognizedTypeName {
+                    span: ty.span,
+                    name: ty.name.clone(),
+                })
+            }
         })
     }
 
@@ -66,7 +75,7 @@ impl Ctx {
     fn build(&mut self, program: &Program) -> Result<(), Diag> {
         for stmt in &program.body {
             let FnDefinition(fn_def) = &stmt.body else {
-                return Err(ME::TopLevelExpr(stmt.span).into_diag());
+                return err(ME::TopLevelExpr { span: stmt.span });
             };
             self.fn_table.insert(
                 fn_def.fn_name.name.clone(),
@@ -75,12 +84,15 @@ impl Ctx {
         }
         for stmt in &program.body {
             let FnDefinition(fn_def) = &stmt.body else {
-                return Err(ME::TopLevelExpr(stmt.span).into_diag());
+                return err(ME::TopLevelExpr { span: stmt.span });
             };
             let block = BasicBlock::build_from_fn(&self, &fn_def)?;
             let name = fn_def.fn_name.name.clone();
             if let Some(..) = self.mir_program.fns.get(&name) {
-                Err(ME::DuplicateFnName(fn_def.fn_name.span, name.clone()).into_diag())?;
+                err(ME::DuplicateFnName {
+                    span: fn_def.fn_name.span,
+                    name: name.clone(),
+                })?;
             }
             self.mir_program.fns.insert(name, block);
         }
@@ -95,39 +107,42 @@ impl BasicBlock {
         let mut block = mir::BasicBlock::new(sig.param_types)?;
 
         if fn_def.body.len() == 0 {
-            Err(ME::MissingRet(fn_def.fn_name.span).into_diag())?;
+            err(ME::MissingRet {
+                span: fn_def.fn_name.span,
+            })?;
         }
 
         for (i, stmt) in (&fn_def.body).into_iter().enumerate() {
             if i == fn_def.body.len() - 1 {
                 if let Ret(..) = stmt.body {
                 } else {
-                    return Err(ME::MissingRet(stmt.span).into_diag());
+                    return err(ME::MissingRet { span: stmt.span });
                 }
             }
             match &stmt.body {
                 Ret(_, expr) => {
                     if i != fn_def.body.len() - 1 {
-                        return Err(ME::MisplacedRet(stmt.span).into_diag())?;
+                        return err(ME::MisplacedRet { span: stmt.span });
                     }
                     let ip = block.add_expr(ctx, &expr)?;
                     block.set_return(ip);
                     let return_type = block.get_type(ip);
                     if return_type != sig.return_type {
-                        Err(ME::WrongReturnType(
-                            expr.span,
-                            fn_def.fn_name.name.to_string(),
-                            return_type,
-                            sig.return_type,
-                        )
-                        .into_diag())?
+                        err(ME::WrongReturnType {
+                            span: expr.span,
+                            fn_name: fn_def.fn_name.name.to_string(),
+                            actual: return_type,
+                            expected: sig.return_type,
+                        })?
                     }
                 }
                 Let(_, ident, expr) => {
                     if let Some(..) = block.get_symbol(&ident.name) {
-                        return Err(
-                            ME::DuplicateDefinition(ident.span, ident.name.to_string()).into_diag()
-                        );
+                        return Err(ME::DuplicateDefinition {
+                            span: ident.span,
+                            name: ident.name.to_string(),
+                        }
+                        .into_diag());
                     }
                     let ip = block.add_expr(ctx, &expr)?;
                     block.set_symbol(ident.name.to_string(), ip)
@@ -147,7 +162,10 @@ impl BasicBlock {
             Literal(lit) => self.push(mir::Literal(*lit), ex.span),
             IdentExpr(x) => {
                 let Some(ip) = self.get_symbol(x) else {
-                    Err(ME::IdentifierNotFound(ex.span, x.to_string()).into_diag())?
+                    err(ME::IdentifierNotFound {
+                        span: ex.span,
+                        name: x.to_string(),
+                    })?
                 };
                 ip
             }
@@ -160,15 +178,20 @@ impl BasicBlock {
                 let right = self.add_expr(ctx, &right_node)?;
                 self.add_binary(*op, left, right)?
             }
-            FnDefinition(fn_def) => return Err(ME::FnInExpr(fn_def.fn_name.span).into_diag()),
-            Ret(span, _) => return Err(ME::MisplacedRet(*span).into_diag()),
-            Let(span, ..) => return Err(ME::MisplacedLet(*span).into_diag()),
+            FnDefinition(fn_def) => err(ME::FnInExpr {
+                span: fn_def.fn_name.span,
+            })?,
+            Ret(span, _) => return err(ME::MisplacedRet { span: *span }),
+            Let(span, ..) => return err(ME::MisplacedLet { span: *span }),
             FnCall(fun, arg_nodes) => {
                 let IdentExpr(fn_name) = &fun.body else {
-                    Err(ME::CallNotIdent(ex.span).into_diag())?
+                    err(ME::CallNotIdent { span: ex.span })?
                 };
                 let Some(sig) = ctx.fn_table.get(fn_name) else {
-                    Err(ME::FunctionNotFound(ex.span, fn_name.to_string()).into_diag())?
+                    err(ME::FunctionNotFound {
+                        span: ex.span,
+                        name: fn_name.to_string(),
+                    })?
                 };
                 if arg_nodes.len() != sig.param_types.len() {
                     Err(ME::from_arg_count(
@@ -178,21 +201,19 @@ impl BasicBlock {
                             count_expected: sig.param_types.len(),
                             count_actual: arg_nodes.len(),
                         },
-                    )
-                    .into_diag())?
+                    ))?
                 }
                 let mut args = vec![];
                 for (arg_node, param) in zip(arg_nodes, &sig.param_types) {
                     let ip = self.add_expr(ctx, arg_node)?;
                     let arg_type = self.get_type(ip);
                     if arg_type != param.param_type {
-                        Err(ME::WrongArgType(
-                            ex.span,
-                            fn_name.to_string(),
-                            arg_type,
-                            param.param_type,
-                        )
-                        .into_diag())?;
+                        err(ME::WrongArgType {
+                            span: ex.span,
+                            fn_name: fn_name.to_string(),
+                            actual: arg_type,
+                            expected: param.param_type,
+                        })?
                     }
                     args.push(ip);
                 }
@@ -212,7 +233,11 @@ impl BasicBlock {
             // Since the only types are i64 and f64, we can't represent an
             // incorrectly-typed unary operation :P
             #[allow(unreachable_patterns)]
-            (_, _) => Err(ME::InvalidTypeUnary(op, arg_type).into_diag())?,
+            (_, _) => err(ME::InvalidTypeUnary {
+                span: op.span,
+                op,
+                arg_type,
+            })?,
         };
         return Ok(self.push(mir::Unary(op1, arg), op.span));
     }
@@ -229,7 +254,12 @@ impl BasicBlock {
             (Mul, F64, F64) => OP2::MulF64,
             (Div, I64, I64) => OP2::DivI64,
             (Div, F64, F64) => OP2::DivF64,
-            (_, _, _) => Err(ME::InvalidTypeBinary(op, left_type, right_type).into_diag())?,
+            (_, _, _) => err(ME::InvalidTypeBinary {
+                span: op.span,
+                op,
+                left_type,
+                right_type,
+            })?,
         };
         return Ok(self.push(mir::Binary(op2, left, right), op.span));
     }

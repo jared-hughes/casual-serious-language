@@ -1,154 +1,124 @@
 use crate::ast::Ident;
-use crate::errors::{Diag, Diagnostic};
-use crate::span::Span;
+use crate::errors::{def_token_errors, Diag, Diagnostic};
+use crate::span::{Span, Spanned};
 use crate::token;
-
-use ParseErrKind::*;
-pub enum ParseErrKind {
-    /* Expression context */
-    ExpectedConsequent,
-    OpenParenMissingCloseParen,
-    UnaryPlusDisallowed,
-    UnexpectedBinaryInitial,
-    UnmatchedCloseParen,
-    UnexpectedEOF,
-    InvalidToken(token::InvalidToken),
-    GeneralUnexpected,
-    /* Function calls */
-    CallExpComma,
-    CallExpCloseParen,
-    /* Statement context */
-    ExpectedSemi,
-    /* Function context */
-    FnExpectedName,
-    // TODO: make this into structs
-    // String is function name
-    FnExpOpenParen(Ident),
-    FnExpParameter(Ident),
-    // (function name, parameter name)
-    FnExpColon(Ident, Ident),
-    FnExpParamType(Ident, Ident),
-    FnExpComma(Ident, Ident),
-    FnBadComma,
-    // String is function name
-    FnExpCloseParen(Ident),
-    FnExpThinArrow(Ident),
-    FnExpReturnType(Ident),
-    FnExpOpenCurly(Ident),
-    FnExpCloseCurly(Ident),
-    // String is variable name
-    LetExpEquals(Ident),
-}
-
-pub struct ParseErr {
-    pub kind: ParseErrKind,
-    pub span: Span,
-}
 
 const EXAMPLE_FN: &str = "For example: `fn add(x: u64, y: u64) -> u64 { x + y }`";
 
 const EXAMPLE_LET: &str = "For example: `let x = 5;`";
 
-impl ParseErrKind {
-    fn msg(self) -> String {
-        match self {
-            /* Expression context */
-            ExpectedConsequent => {
-                format!("Unexpected token here. A binary operator like + may be preferred.")
-            }
-            OpenParenMissingCloseParen => format!("Expected to see a ')' here."),
-            UnaryPlusDisallowed => format!("Leading '+' is not supported."),
-            UnexpectedBinaryInitial => format!("Unexpected binary operator in initial position."),
-            UnmatchedCloseParen => format!("What's this ')' doing here? I don't see a '('"),
-            UnexpectedEOF => format!("Hold your horses. An EOF already?"),
-            InvalidToken(token) => format!("{}", token.msg),
-            GeneralUnexpected => format!("Unexpected token."),
-            /* Function calls */
-            CallExpComma => format!("Expected ',' after function argument."),
-            CallExpCloseParen => format!("Expected ')' to end function arguments."),
-            FnBadComma => format!("Comma ',' is not allowed before first argument."),
-            /* Statement context */
-            ExpectedSemi => format!("Expected semicolon to end the statement"),
-            /* Functions */
-            FnExpectedName => {
-                format!("Expected identifier. Functions must have a name. {EXAMPLE_FN}")
-            }
-            FnExpOpenParen(fn_name) => {
-                format!(
-                    "Expected '(' to begin parameter declaration \
-                    for function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpParameter(fn_name) => {
-                format!(
-                    "Expected an identifier to serve as a function parameter \
-                    for function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpColon(fn_name, param) => {
-                format!(
-                    "Expected ':' to provide the type of the parameter '{param}' \
-                    for function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpParamType(fn_name, param) => {
-                format!(
-                    "Expected an identifier to provide the type of the parameter '{param}' \
-                    for function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpComma(fn_name, param) => {
-                format!(
-                    "Expected ',' after function parameter '{param}' \
-                    for function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpCloseParen(fn_name) => {
-                format!(
-                    "Expected ')' to end function parameters \
-                    for function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpThinArrow(fn_name) => {
-                format!(
-                    "Expected '->' to declare return type \
-                    for function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpReturnType(fn_name) => {
-                format!(
-                    "Expected an identifier to provide the return type \
-                    for function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpOpenCurly(fn_name) => {
-                format!(
-                    "Expected '{{' to begin the body \
-                    of function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            FnExpCloseCurly(fn_name) => {
-                format!(
-                    "Expected '}}' to end the body \
-                    of function '{fn_name}'. {EXAMPLE_FN}"
-                )
-            }
-            LetExpEquals(ident) => {
-                format!("Expected '=' to provide an initial value for '{ident}'. {EXAMPLE_LET}")
-            }
-        }
-    }
-
-    pub fn span(self, span: Span) -> Diag {
-        ParseErr { kind: self, span }.into_diag()
-    }
+def_token_errors! {
+ExpectedConsequent => format!("Unexpected token here. A binary operator like + may be preferred."),
+OpenParenMissingCloseParen => format!("Expected to see a ')' here."),
+UnaryPlusDisallowed => format!("Leading '+' is not supported."),
+UnexpectedBinaryInitial => format!("Unexpected binary operator in initial position."),
+UnmatchedCloseParen => format!("What's this ')' doing here? I don't see a '('"),
+UnexpectedEOF => format!("Hold your horses. An EOF already?"),
+GeneralUnexpected => format!("Unexpected token."),
+CallExpComma => format!("Expected ',' after function argument."),
+CallExpCloseParen => format!("Expected ')' to end function arguments."),
+FnBadComma => format!("Comma ',' is not allowed before first argument."),
+ExpectedSemi => format!("Expected semicolon to end the statement"),
+FnExpectedName => {
+    format!("Expected identifier. Functions must have a name. {EXAMPLE_FN}")
+},
 }
 
-impl Diagnostic for ParseErr {
-    fn into_diag(self) -> Diag {
-        Diag {
-            span: self.span,
-            message: self.kind.msg(),
-        }
-    }
+def_token_errors! {
+pub struct FnExpParameter {
+    pub fn_name: Ident,
+}
+msg: self => format!(
+    "Expected an identifier to serve as a function parameter for function '{0}'. {EXAMPLE_FN}",
+    self.fn_name
+);
+
+pub struct FnExpOpenParen {
+    pub fn_name: Ident,
+}
+msg: self => format!(
+    "Expected '(' to begin parameter declaration for function '{}'. {EXAMPLE_FN}",
+    self.fn_name
+);
+
+pub struct FnExpColon {
+    pub fn_name: Ident,
+    pub param: Ident,
+}
+msg: self => format!(
+    "Expected ':' to provide the type of the parameter '{1}' \
+    for function '{0}'. {EXAMPLE_FN}",
+    self.fn_name, self.param
+);
+
+pub struct FnExpParamType {
+    pub fn_name: Ident,
+    pub param: Ident,
+}
+msg: self => format!(
+    "Expected an identifier to provide the type of the parameter '{1}' \
+    for function '{0}'. {EXAMPLE_FN}",
+    self.fn_name, self.param
+);
+
+pub struct InvalidToken {
+    pub token: token::InvalidToken,
+}
+msg: self => format!("{}", self.token.msg);
+
+pub struct FnExpComma {
+    pub fn_name: Ident,
+    pub param_name: Ident,
+}
+msg: self => format!(
+    "Expected ',' after function parameter '{1}' for function '{0}'. {EXAMPLE_FN}",
+    self.fn_name, self.param_name
+);
+
+pub struct FnExpCloseParen {
+    pub fn_name: Ident,
+}
+msg: self => format!(
+    "Expected ')' to end function parameters for function '{0}'. {EXAMPLE_FN}",
+    self.fn_name
+);
+
+pub struct FnExpThinArrow {
+    pub fn_name: Ident,
+}
+msg: self => format!(
+    "Expected '->' to declare return type for function '{0}'. {EXAMPLE_FN}",
+    self.fn_name
+);
+
+pub struct FnExpReturnType {
+    pub fn_name: Ident,
+}
+msg: self => format!(
+    "Expected an identifier to provide the return type for function '{0}'. {EXAMPLE_FN}",
+    self.fn_name
+);
+
+pub struct FnExpOpenCurly {
+    pub fn_name: Ident,
+}
+msg: self => format!(
+    "Expected '{{' to begin the body of function '{0}'. {EXAMPLE_FN}",
+    self.fn_name
+);
+
+pub struct FnExpCloseCurly {
+    pub fn_name: Ident,
+}
+msg: self => format!(
+    "Expected '}}' to end the body of function '{0}'. {EXAMPLE_FN}",
+    self.fn_name
+);
+
+pub struct LetExpEquals {
+    pub ident: Ident,
+}
+msg: self => format!(
+    "Expected an '=', to provide an initial value for '{0}'. {EXAMPLE_LET}",
+self.ident);
 }
