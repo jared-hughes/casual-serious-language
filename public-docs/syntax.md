@@ -26,7 +26,9 @@ fn add(x: i64, y: i64) -> i64 {
 
 ## Semicolons
 
-Currently, semicolons are required after each statement (besides functions).
+Currently, semicolons are required after each statement (besides functions, which end in a curly brace `}`).
+
+## Optional Semicolons (not yet implemented)
 
 The plan is to eventually make semicolons optional everywhere (but suggested -- a hypothetical auto-formatter would insert them).
 

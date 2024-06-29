@@ -18,3 +18,4 @@ cp "${PACK_DIR}"/csl_web.d.ts site/src/
 )
 cp "${PACK_DIR}"/*.{wasm,js} public-deploy/js
 rsync -a site/public/ public-deploy/
+rsync -a public-docs/ public-deploy/

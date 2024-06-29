@@ -4,7 +4,7 @@ A serious programming language, but casually.
 
 Going for features that I actually use in practice. Early in development.
 
-Reference [docs/SYNTAX.md](/docs/SYNTAX.md) for the language syntax by example.
+Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language syntax by example.
 
 ## Next Steps
 
