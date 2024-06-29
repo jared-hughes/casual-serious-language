@@ -24,6 +24,18 @@ const _examples: Example[] = [
       ret add(1.0, 2.0) * 3.5;
     }`,
   },
+  {
+    name: "let binding",
+    source: `fn sum_square(x: f64, y: f64) -> f64 {
+      let xx = x * x;
+      let yy = y * y;
+      ret xx + yy;
+    }
+
+    fn main() -> f64 {
+      ret sum_square(3.0, 4.0);
+    }`,
+  },
 ];
 
 export const examples: Example[] = _examples.map((ex) => ({

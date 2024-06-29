@@ -99,18 +99,23 @@ impl BasicBlock {
         }
 
         for (i, stmt) in (&fn_def.body).into_iter().enumerate() {
-            let (is_ret, inner_expr) = match &stmt.body {
-                Ret(_, expr) => (true, expr.as_ref()),
-                _ => (false, stmt),
-            };
-            let ip = block.add_expr(ctx, inner_expr)?;
-            match (i == fn_def.body.len() - 1, is_ret) {
-                (true, true) => {
+            if i == fn_def.body.len() - 1 {
+                if let Ret(..) = stmt.body {
+                } else {
+                    return Err(ME::MissingRet(stmt.span).into_diag());
+                }
+            }
+            match &stmt.body {
+                Ret(_, expr) => {
+                    if i != fn_def.body.len() - 1 {
+                        return Err(ME::MisplacedRet(stmt.span).into_diag())?;
+                    }
+                    let ip = block.add_expr(ctx, &expr)?;
                     block.set_return(ip);
                     let return_type = block.get_type(ip);
                     if return_type != sig.return_type {
                         Err(ME::WrongReturnType(
-                            inner_expr.span,
+                            expr.span,
                             fn_def.fn_name.name.to_string(),
                             return_type,
                             sig.return_type,
@@ -118,10 +123,19 @@ impl BasicBlock {
                         .into_diag())?
                     }
                 }
-                (true, false) => Err(ME::MissingRet(stmt.span).into_diag())?,
-                (false, true) => Err(ME::MisplacedRet(stmt.span).into_diag())?,
-                (false, false) => {}
-            };
+                Let(_, ident, expr) => {
+                    if let Some(..) = block.get_symbol(&ident.name) {
+                        return Err(
+                            ME::DuplicateDefinition(ident.span, ident.name.to_string()).into_diag()
+                        );
+                    }
+                    let ip = block.add_expr(ctx, &expr)?;
+                    block.set_symbol(ident.name.to_string(), ip)
+                }
+                _ => {
+                    // Dead code
+                }
+            }
         }
 
         Ok(block)
@@ -148,6 +162,7 @@ impl BasicBlock {
             }
             FnDefinition(fn_def) => return Err(ME::FnInExpr(fn_def.fn_name.span).into_diag()),
             Ret(span, _) => return Err(ME::MisplacedRet(*span).into_diag()),
+            Let(span, ..) => return Err(ME::MisplacedLet(*span).into_diag()),
             FnCall(fun, arg_nodes) => {
                 let Ident(fn_name) = &fun.body else {
                     Err(ME::CallNotIdent(ex.span).into_diag())?
@@ -283,7 +298,7 @@ mod build_mir_expr_block {
         check_build_mir(
             "fn f() -> i64 { ret 1.0 + 2.0; }",
             expect![
-                "At 21-29: Expected function 'f' to return type 'f64', but it returned type 'i64'"
+                "At 21-29: Expected function 'f' to return type 'i64', but it returned type 'f64'"
             ],
         );
     }
@@ -558,6 +573,56 @@ mod build_mir_functions {
         check_build_mir(
             "fn f() -> i64 { ret f() + 1.0; };",
             expect!["At 25: Type error: Cannot perform i64 + f64"],
+        );
+    }
+
+    #[test]
+    fn fn_let() {
+        check_build_mir(
+            "fn sumSq(x: f64, y: f64) -> f64 {\
+                let xx = x * x;\
+                let yy = y * y;\
+                ret xx + yy;\
+            }",
+            expect![[r#"
+                fn sumSq BasicBlock
+                   0: f64 LoadArg(F64)
+                   1: f64 LoadArg(F64)
+                   2: f64 Binary(MulF64, IP(0), IP(0))
+                   3: f64 Binary(MulF64, IP(1), IP(1))
+                   4: f64 Binary(AddF64, IP(2), IP(3))"#]],
+        );
+        check_build_mir(
+            "fn pow16(x: f64) -> f64 {\
+                let x2 = x * x;\
+                let x4 = x2 * x2;\
+                ret x4 * x4;\
+            }",
+            expect![[r#"
+                fn pow16 BasicBlock
+                   0: f64 LoadArg(F64)
+                   1: f64 Binary(MulF64, IP(0), IP(0))
+                   2: f64 Binary(MulF64, IP(1), IP(1))
+                   3: f64 Binary(MulF64, IP(2), IP(2))"#]],
+        );
+    }
+
+    #[test]
+    fn fn_let_collisions() {
+        check_build_mir(
+            "fn f(x: f64, y: f64) -> f64 {\
+                let x = y;
+                ret x;
+            }",
+            expect!["At 34: Cannot redefine 'x' since it is already defined."],
+        );
+        check_build_mir(
+            "fn f(x: f64) -> f64 {\
+                let z = x;
+                let z = x;
+                ret z;
+            }",
+            expect!["At 53: Cannot redefine 'z' since it is already defined."],
         );
     }
 }

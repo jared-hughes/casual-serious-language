@@ -205,10 +205,15 @@ impl<'a> Parser<'a> {
             CloseDelim(Parenthesis) => Err(PE::UnmatchedCloseParen.span(start.span)),
             Eof => Err(PE::UnexpectedEOF.span(start.span)),
             Whitespace | Invalid(_) => panic!("Whitespace should be skipped"),
-            OpenDelim(CurlyBrace) | CloseDelim(CurlyBrace) | Colon | Comma | ThinArrow | Semi => {
-                Err(PE::GeneralUnexpected.span(start.span))
-            }
+            OpenDelim(CurlyBrace)
+            | CloseDelim(CurlyBrace)
+            | Colon
+            | Comma
+            | ThinArrow
+            | Semi
+            | Equals => Err(PE::GeneralUnexpected.span(start.span)),
             KwFn => self.parse_fn(start),
+            KwLet => self.parse_let(start),
         }
     }
 
@@ -328,6 +333,17 @@ impl<'a> Parser<'a> {
             span(fn_token.span.lo, close_curly.span.hi),
         ));
     }
+
+    fn parse_let(&mut self, let_token: Token) -> ExprResult {
+        // x
+        let ident = consume_ident!(self, PE::FnExpectedName);
+        // =
+        consume_token!(self, Equals, PE::LetExpEquals(ident));
+        // y * 2
+        let init = self.parse_main(BindingPower::Top)?;
+        let s = span(let_token.span.lo, init.span.hi);
+        return Ok(expr(ast::Let(let_token.span, ident, init), s));
+    }
 }
 
 fn binop_power(t: BinOpToken) -> BindingPower {
@@ -354,7 +370,7 @@ fn terminates_block(tok: TokenKind) -> bool {
     match tok {
         CloseDelim(_) | Eof | Invalid(_) => true,
         Semi | BinOp(_) | OpenDelim(_) | ThinArrow | Comma | Literal(_) | Colon | Ident(_)
-        | KwFn | KwRet => false,
+        | KwFn | KwRet | KwLet | Equals => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }
@@ -366,7 +382,7 @@ fn terminates_block(tok: TokenKind) -> bool {
 fn terminates_fn_params(tok: TokenKind) -> bool {
     match tok {
         BinOp(_) | OpenDelim(_) | CloseDelim(_) | Eof | ThinArrow | Invalid(_) | Semi => true,
-        Comma | Literal(_) | Colon | Ident(_) | KwFn | KwRet => false,
+        Comma | Literal(_) | Colon | Ident(_) | KwFn | KwRet | KwLet | Equals => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }
@@ -601,6 +617,42 @@ mod parser_expr_tests {
             expect!["At 5: Expected ')' to end function arguments."],
         );
     }
+
+    #[test]
+    fn let_basic() {
+        check_parsing(
+            "let x = 5 + 3",
+            expect![[r#"
+                (1-13)Let(1-3)[x](
+                    (9-13)Binary[Add(11)](
+                        (9)Literal(Integer(5)),
+                        (13)Literal(Integer(3)),
+                    ),
+                )"#]],
+        );
+    }
+
+    #[test]
+    fn let_errors() {
+        check_parsing(
+            "let",
+            expect!["At (!4,4!): Expected identifier. Functions must have a name. For example: `fn add(x: u64, y: u64) -> u64 { x + y }`"],
+        );
+        check_parsing(
+            "let x",
+            expect!["At (!6,6!): Expected '=' to provide an initial value for 'x'. For example: `let x = 5;`"],
+        );
+        check_parsing(
+            "let x 5",
+            expect![
+                "At 7: Expected '=' to provide an initial value for 'x'. For example: `let x = 5;`"
+            ],
+        );
+        check_parsing(
+            "let x =",
+            expect!["At (!8,8!): Hold your horses. An EOF already?"],
+        );
+    }
 }
 
 #[cfg(test)]
@@ -722,6 +774,16 @@ mod parser_stmt_tests {
             "fn f() -> i64 { }",
             expect![[r#"
                 (1-17)FnDefinition[f]() {}
+            "#]],
+        );
+        check_parsing(
+            "fn f() -> i64 { let x = y; }",
+            expect![[r#"
+                (1-28)FnDefinition[f]() {
+                    (17-25)Let(17-19)[x](
+                        (25)Ident("y"),
+                    ),
+                }
             "#]],
         );
         check_parsing(

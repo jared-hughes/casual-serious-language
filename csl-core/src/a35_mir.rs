@@ -163,7 +163,12 @@ impl BasicBlock {
         self.vec.iter()
     }
 
+    pub fn set_symbol(&mut self, name: String, ip: IP) {
+        self.symbol_table.insert(name, ip);
+    }
+
     pub fn get_symbol(&self, symb: &str) -> Option<IP> {
+        // TODO: IP should derive Copy.
         self.symbol_table.get(symb).cloned()
     }
 }

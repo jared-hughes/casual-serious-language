@@ -44,6 +44,8 @@ pub enum TokenKind<'a> {
     OpenDelim(Delimiter),
     /// A closing delimiter, like `)`.
     CloseDelim(Delimiter),
+    /// '='
+    Equals,
     /// ';'
     Semi,
     /// ':'
@@ -58,6 +60,8 @@ pub enum TokenKind<'a> {
     KwFn,
     /// 'ret'
     KwRet,
+    /// 'let'
+    KwLet,
 
     /* Atoms */
     /// Literal number

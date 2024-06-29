@@ -11,6 +11,10 @@
 - Parentheses for grouping: `(1 + 2) * 3`
 - Identifiers: `abc` (currently unusable).
 
+## Semicolons
+
+Currently, semicolons are required after each statement (besides functions, which end in a curly brace `}`).
+
 ## Functions
 
 Currently, you must have a main function to run anything, and the process prints the return value of `main()`.
@@ -24,9 +28,17 @@ fn add(x: i64, y: i64) -> i64 {
 }
 ```
 
-## Semicolons
+## Let bindings
 
-Currently, semicolons are required after each statement (besides functions, which end in a curly brace `}`).
+Use `let x = 5` to assign the value `5` to `x`. Bindings are immutable, and only variables are currently supported. Shadowing is not allowed.
+
+```rs
+fn sum_square(x: f64, y: f64) -> f64 {
+  let xx = x * x;
+  let yy = y * y;
+  ret xx + yy;
+}
+```
 
 ## Optional Semicolons (not yet implemented)
 

@@ -18,8 +18,10 @@ pub enum BuildMIRErr {
     TopLevelExpr(Span),
     UnrecognizedTypeName(Span, String),
     MisplacedRet(Span),
+    MisplacedLet(Span),
     MissingRet(Span),
     DuplicateParameter(Span, String),
+    DuplicateDefinition(Span, String),
     DuplicateFnName(Span, String),
     /* Type errors */
     InvalidTypeUnary(UnaryOp, Type),
@@ -93,6 +95,12 @@ impl Diagnostic for BuildMIRErr {
                     name
                 ),
             },
+            MisplacedLet(span) => Diag {
+                span,
+                message: format!(
+                    "Misplaced 'let'. For now, 'let' can only be used in statement position."
+                ),
+            },
             MisplacedRet(span) => Diag {
                 span,
                 message: format!(
@@ -136,6 +144,10 @@ impl Diagnostic for BuildMIRErr {
                     but it returned type '{}'",
                     fn_name, expected, actual
                 ),
+            },
+            DuplicateDefinition(span, name) => Diag {
+                span,
+                message: format!("Cannot redefine '{name}' since it is already defined."),
             },
             DuplicateParameter(span, name) => Diag {
                 span,

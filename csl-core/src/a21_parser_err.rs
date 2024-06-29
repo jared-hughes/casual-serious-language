@@ -30,12 +30,14 @@ pub enum ParseErrKind {
     FnExpParamType(Ident, Ident),
     FnExpComma(Ident, Ident),
     FnBadComma,
-    // Function name
+    // String is function name
     FnExpCloseParen(Ident),
     FnExpThinArrow(Ident),
     FnExpReturnType(Ident),
     FnExpOpenCurly(Ident),
     FnExpCloseCurly(Ident),
+    // String is variable name
+    LetExpEquals(Ident),
 }
 
 pub struct ParseErr {
@@ -44,6 +46,8 @@ pub struct ParseErr {
 }
 
 const EXAMPLE_FN: &str = "For example: `fn add(x: u64, y: u64) -> u64 { x + y }`";
+
+const EXAMPLE_LET: &str = "For example: `let x = 5;`";
 
 impl ParseErrKind {
     fn msg(self) -> String {
@@ -128,6 +132,9 @@ impl ParseErrKind {
                     "Expected '}}' to end the body \
                     of function '{fn_name}'. {EXAMPLE_FN}"
                 )
+            }
+            LetExpEquals(ident) => {
+                format!("Expected '=' to provide an initial value for '{ident}'. {EXAMPLE_LET}")
             }
         }
     }

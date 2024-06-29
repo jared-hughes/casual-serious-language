@@ -156,6 +156,7 @@ impl<'a> RawLexer<'a> {
             ',' => Comma,
             ':' => Colon,
             ';' => Semi,
+            '=' => Equals,
 
             c => panic!("Crazy character '{}'.", c),
         };
@@ -170,6 +171,7 @@ impl<'a> RawLexer<'a> {
         match () {
             () if s == "fn" => KwFn,
             () if s == "ret" => KwRet,
+            () if s == "let" => KwLet,
             _ => Ident(s),
         }
     }
@@ -436,10 +438,11 @@ mod lexer_tests {
     #[test]
     fn keywords() {
         check_lexing(
-            "fn ret",
+            "fn ret let",
             expect![[r#"
                 KwFn [len=2]
                 KwRet [len=3]
+                KwLet [len=3]
             "#]],
         );
     }

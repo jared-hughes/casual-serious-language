@@ -91,6 +91,8 @@ pub enum ExprInner {
     Paren(Box<Expr>),
     /// Function call `f(x,y,z)`
     FnCall(Box<Expr>, Vec<Expr>),
+    /// Let assignment `let x = 3`
+    Let(Span, Ident, Box<Expr>),
 }
 
 pub struct Expr {
@@ -141,6 +143,10 @@ impl fmt::Debug for ExprInner {
                     tup.field(arg);
                 }
                 tup.finish()
+            }
+            Let(span, ident, init) => {
+                write!(f, "Let({span:?})[{ident}]")?;
+                f.debug_tuple("").field(init).finish()
             }
         }
     }
