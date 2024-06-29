@@ -66,5 +66,5 @@ To build for web,
 Then serve the files in public-deploy. I like doing
 
 ```sh
-./build-site.sh && python3 -m http.server -d public-deploy/
+./build-site.sh && npx http-server public-deploy/
 ```

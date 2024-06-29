@@ -145,7 +145,7 @@ impl BasicBlock {
         Ok(match &ex.body {
             Paren(arg) => self.add_expr(ctx, arg)?,
             Literal(lit) => self.push(mir::Literal(*lit), ex.span),
-            Ident(x) => {
+            IdentExpr(x) => {
                 let Some(ip) = self.get_symbol(x) else {
                     Err(ME::IdentifierNotFound(ex.span, x.to_string()).into_diag())?
                 };
@@ -164,7 +164,7 @@ impl BasicBlock {
             Ret(span, _) => return Err(ME::MisplacedRet(*span).into_diag()),
             Let(span, ..) => return Err(ME::MisplacedLet(*span).into_diag()),
             FnCall(fun, arg_nodes) => {
-                let Ident(fn_name) = &fun.body else {
+                let IdentExpr(fn_name) = &fun.body else {
                     Err(ME::CallNotIdent(ex.span).into_diag())?
                 };
                 let Some(sig) = ctx.fn_table.get(fn_name) else {

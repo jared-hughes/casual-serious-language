@@ -176,7 +176,7 @@ impl<'a> Parser<'a> {
         let start = self.next()?;
         match start.kind {
             Literal(x) => Ok(expr(ast::Literal(x), start.span)),
-            Ident(s) => Ok(expr(ast::Ident(s.to_owned()), start.span)),
+            Ident(s) => Ok(expr(ast::IdentExpr(s.to_owned()), start.span)),
             OpenDelim(Parenthesis) => {
                 let inner = self.parse_main(BindingPower::Top)?;
                 let close_paren = consume_token!(

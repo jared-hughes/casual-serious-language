@@ -82,7 +82,7 @@ pub enum ExprInner {
     /// Identifier like `x`.
     // TODO: store these as indexes to learn about interning and arenas
     // See Rust's InternerInner in rustc_span.
-    Ident(String),
+    IdentExpr(String),
     /// Function definition
     FnDefinition(FunctionDefinition),
     /// Return with unchanged control flow, `ret x;`
@@ -119,7 +119,7 @@ impl fmt::Debug for ExprInner {
                 f.debug_tuple("").field(left).field(right).finish()
             }
             Literal(x) => write!(f, "Literal({x:?})"),
-            Ident(x) => write!(f, "Ident({x:?})"),
+            IdentExpr(x) => write!(f, "Ident({x:?})"),
             FnDefinition(def) => {
                 write!(f, "FnDefinition[{}](", def.fn_name)?;
                 for (i, p) in (&def.params).into_iter().enumerate() {
