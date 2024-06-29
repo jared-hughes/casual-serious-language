@@ -1,4 +1,5 @@
 import init, { run } from "./csl_web.js";
+import { examples } from "./examples.js";
 
 /** Assume $ always succeeds and returns an HTMLElement */
 function $<MatchType extends HTMLElement>(selector: string) {
@@ -6,15 +7,6 @@ function $<MatchType extends HTMLElement>(selector: string) {
 }
 
 let wasmReady = false;
-
-const example = `
-fn add(x: i64, y: i64) -> i64 {
-  ret x + y;
-}
-
-fn main() -> i64 {
-  ret add(1,2) * 3;
-}`.slice(1); // Trim off the leading newline
 
 const form = $<HTMLFormElement>("form");
 form.onsubmit = () => {
@@ -52,12 +44,24 @@ const srcInput = $<HTMLTextAreaElement>("textarea#src");
 
 const saved = localStorage.getItem("saved-src");
 if (saved === null || /^\s+$/.test(saved)) {
-  srcInput.value = example;
+  srcInput.value = examples[0].source;
 } else {
   srcInput.value = saved;
 }
 
-srcInput.addEventListener("input", debounce(saveToLocalStorage, 1000), false);
+const examplesSpan = $<HTMLSpanElement>("#examples");
+for (const example of examples) {
+  const btn = document.createElement("button");
+  btn.innerText = example.name;
+  btn.addEventListener("click", () => {
+    srcInput.value = example.source;
+    saveToLocalStorage();
+  });
+  examplesSpan.appendChild(btn);
+  examplesSpan.appendChild(document.createTextNode(" "));
+}
+
+srcInput.addEventListener("input", debounce(saveToLocalStorage, 500), false);
 
 init().then(() => {
   wasmReady = true;
