@@ -28,6 +28,8 @@ pub mod runtime_err;
 pub mod runtime_value;
 #[path = "b05_span.rs"]
 pub mod span;
+#[path = "a29_symbol_table.rs"]
+pub mod symbol_table;
 #[path = "a15_token.rs"]
 pub mod token;
 #[path = "a34_types.rs"]

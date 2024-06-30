@@ -2,14 +2,9 @@ pub use crate::ast::{
     BinOpKind,
     Lit::{self, *},
 };
-use crate::build_mir_err as ME;
-use crate::errors::{Diag, Diagnostic};
-use crate::span::{Span, DUMMY_SPAN};
+use crate::intrinsics::{OP1, OP2};
+use crate::span::Span;
 use crate::types::Type;
-use crate::{
-    build_mir::FunctionParam,
-    intrinsics::{OP1, OP2},
-};
 use index_vec::IndexVec;
 use std::collections::HashMap;
 use std::fmt;
@@ -76,33 +71,17 @@ index_vec::define_index_type! {
 #[derive(Clone)]
 pub struct BasicBlock {
     pub params: Vec<Type>,
-    symbol_table: HashMap<String, IP>,
     vec: IndexVec<IP, Inst>,
     return_index: IP,
 }
 
 impl BasicBlock {
-    pub fn new(params: Vec<FunctionParam>) -> Result<BasicBlock, Diag> {
-        let mut block = BasicBlock {
-            params: params.iter().map(|x| x.param_type).collect(),
-            symbol_table: HashMap::new(),
+    pub fn new(params: Vec<Type>) -> BasicBlock {
+        BasicBlock {
+            params,
             vec: IndexVec::new(),
             return_index: IP::from_usize(0),
-        };
-        for p in params {
-            let name = p.name.name.to_string();
-            let ip = block.push(LoadArg(p.param_type), p.name.span);
-            if let Some(..) = block.symbol_table.get(&name) {
-                // TODO: Proper span for this duplicate parameter
-                Err(ME::DuplicateParameter {
-                    span: DUMMY_SPAN,
-                    name: name.to_owned(),
-                }
-                .into_diag())?;
-            }
-            block.symbol_table.insert(name, ip);
         }
-        return Ok(block);
     }
 
     pub fn set_return(&mut self, ip: IP) {
@@ -165,15 +144,6 @@ impl BasicBlock {
 
     pub fn iter(&self) -> core::slice::Iter<'_, Inst> {
         self.vec.iter()
-    }
-
-    pub fn set_symbol(&mut self, name: String, ip: IP) {
-        self.symbol_table.insert(name, ip);
-    }
-
-    pub fn get_symbol(&self, symb: &str) -> Option<IP> {
-        // TODO: IP should derive Copy.
-        self.symbol_table.get(symb).cloned()
     }
 }
 

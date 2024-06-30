@@ -13,6 +13,7 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 - Literals `true` and `false`.
 - Compiling `a && b` to `if (a) b else false` to get correct short-circuiting.
   - Note `&&` and `||` is not currently implemented for this reason.
+- Codemirror in the web preview, to underline errors.
 - Figure how to type consequent parsing better. (macros?)
 - Compile portions of the code better (don't stop on the first err, allow for error nodes / IPs)
 - Better Symbol table handling (ugly inside `a35_mir` rn.)

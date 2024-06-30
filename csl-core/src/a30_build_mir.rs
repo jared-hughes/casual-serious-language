@@ -6,10 +6,11 @@ use crate::build_mir_err::{self as ME, ArgCountWrong};
 use crate::errors::{Diag, Diagnostic};
 use crate::intrinsics::{OP1, OP2};
 use crate::mir::{self, BasicBlock, IP};
+use crate::symbol_table::SymbolTable;
 use crate::types::*;
 
 pub fn ast_to_mir(program: &Program) -> Result<mir::Program, Diag> {
-    Ctx::build_mir(program)
+    TopCtx::build_mir(program)
 }
 
 pub struct FunctionParam {
@@ -26,13 +27,14 @@ fn err<T>(x: impl Diagnostic) -> Result<T, Diag> {
     Err(x.into_diag())
 }
 
-struct Ctx {
+/// Top-level context
+struct TopCtx {
     mir_program: mir::Program,
     fn_table: HashMap<String, FnSignature>,
 }
 
 /* Symbol-table stuff */
-impl Ctx {
+impl TopCtx {
     fn lookup_type(&self, ty: &Ident) -> Result<Type, Diag> {
         Ok(match ty.name.as_str() {
             "i64" => Type::I64,
@@ -63,14 +65,14 @@ impl Ctx {
 }
 
 /* Statement-level */
-impl Ctx {
+impl TopCtx {
     pub fn build_mir(program: &Program) -> Result<mir::Program, Diag> {
-        let mut frontend = Ctx {
+        let mut top_level_ctx = Self {
             mir_program: mir::Program::new(),
             fn_table: HashMap::new(),
         };
-        frontend.build(program)?;
-        Ok(frontend.mir_program)
+        top_level_ctx.build(program)?;
+        Ok(top_level_ctx.mir_program)
     }
 
     fn build(&mut self, program: &Program) -> Result<(), Diag> {
@@ -87,8 +89,9 @@ impl Ctx {
             let FnDefinition(fn_def) = &stmt.body else {
                 return err(ME::TopLevelExpr { span: stmt.span });
             };
-            let block = BasicBlock::build_from_fn(&self, &fn_def)?;
             let name = fn_def.fn_name.name.clone();
+            let ctx = Ctx::from_top(self);
+            let block = Ctx::build_bb_from_fn(&ctx, &fn_def)?;
             if let Some(..) = self.mir_program.fns.get(&name) {
                 err(ME::DuplicateFnName {
                     span: fn_def.fn_name.span,
@@ -101,11 +104,51 @@ impl Ctx {
     }
 }
 
+/// Expression-level context
+struct Ctx<'ctx> {
+    top_ctx: &'ctx TopCtx,
+    pub symbol_table: SymbolTable<'ctx>,
+}
+
+impl<'ctx> Ctx<'ctx> {
+    fn from_top(top_ctx: &'ctx TopCtx) -> Ctx<'ctx> {
+        Ctx {
+            top_ctx,
+            symbol_table: SymbolTable::new(),
+        }
+    }
+
+    fn child(&'ctx self) -> Ctx<'ctx> {
+        Ctx {
+            top_ctx: self.top_ctx,
+            symbol_table: self.symbol_table.child(),
+        }
+    }
+}
+
 /* Expr-level */
-impl BasicBlock {
-    fn build_from_fn(ctx: &Ctx, fn_def: &FunctionDefinition) -> Result<mir::BasicBlock, Diag> {
-        let sig = ctx.cook_fn_signature(fn_def)?;
-        let mut block = mir::BasicBlock::new(sig.param_types)?;
+impl<'ctx> Ctx<'ctx> {
+    fn build_bb_from_fn(
+        pctx: &'ctx Ctx<'ctx>,
+        fn_def: &FunctionDefinition,
+    ) -> Result<mir::BasicBlock, Diag> {
+        let mut ctx = pctx.child();
+        let sig = ctx.top_ctx.cook_fn_signature(fn_def)?;
+        let param_types = sig.param_types.iter().map(|x| x.param_type).collect();
+        let mut block = mir::BasicBlock::new(param_types);
+
+        for p in sig.param_types {
+            let name = p.name.name.to_string();
+            let ip = block.push(mir::LoadArg(p.param_type), p.name.span);
+            if let Some(..) = ctx.symbol_table.get_symbol(&name) {
+                Err(ME::DuplicateParameter {
+                    span: p.name.span,
+                    name: name.to_owned(),
+                }
+                .into_diag())?;
+            }
+            ctx.symbol_table.set_symbol(name, ip);
+        }
 
         if fn_def.body.len() == 0 {
             err(ME::MissingRet {
@@ -125,7 +168,7 @@ impl BasicBlock {
                     if i != fn_def.body.len() - 1 {
                         return err(ME::MisplacedRet { span: stmt.span });
                     }
-                    let ip = block.add_expr(ctx, &expr)?;
+                    let ip = ctx.add_expr(&mut block, &expr)?;
                     block.set_return(ip);
                     let return_type = block.get_type(ip);
                     if return_type != sig.return_type {
@@ -138,15 +181,15 @@ impl BasicBlock {
                     }
                 }
                 Let(_, ident, expr) => {
-                    if let Some(..) = block.get_symbol(&ident.name) {
+                    if let Some(..) = ctx.symbol_table.get_symbol(&ident.name) {
                         return Err(ME::DuplicateDefinition {
                             span: ident.span,
                             name: ident.name.to_string(),
                         }
                         .into_diag());
                     }
-                    let ip = block.add_expr(ctx, &expr)?;
-                    block.set_symbol(ident.name.to_string(), ip)
+                    let ip = ctx.add_expr(&mut block, &expr)?;
+                    ctx.symbol_table.set_symbol(ident.name.to_string(), ip)
                 }
                 _ => {
                     // Dead code
@@ -157,12 +200,12 @@ impl BasicBlock {
         Ok(block)
     }
 
-    fn add_expr(&mut self, ctx: &Ctx, ex: &Expr) -> Result<IP, Diag> {
+    fn add_expr(&self, block: &mut BasicBlock, ex: &Expr) -> Result<IP, Diag> {
         Ok(match &ex.body {
-            Paren(arg) => self.add_expr(ctx, arg)?,
-            Literal(lit) => self.push(mir::Literal(*lit), ex.span),
+            Paren(arg) => self.add_expr(block, arg)?,
+            Literal(lit) => block.push(mir::Literal(*lit), ex.span),
             IdentExpr(x) => {
-                let Some(ip) = self.get_symbol(x) else {
+                let Some(ip) = self.symbol_table.get_symbol(x) else {
                     err(ME::IdentifierNotFound {
                         span: ex.span,
                         name: x.to_string(),
@@ -171,13 +214,13 @@ impl BasicBlock {
                 ip
             }
             Unary(op, arg_node) => {
-                let arg = self.add_expr(ctx, &arg_node)?;
-                self.add_unary(*op, arg)?
+                let arg = self.add_expr(block, &arg_node)?;
+                block.add_unary(*op, arg)?
             }
             Binary(op, left_node, right_node) => {
-                let left = self.add_expr(ctx, &left_node)?;
-                let right = self.add_expr(ctx, &right_node)?;
-                self.add_binary(*op, left, right)?
+                let left = self.add_expr(block, &left_node)?;
+                let right = self.add_expr(block, &right_node)?;
+                block.add_binary(*op, left, right)?
             }
             FnDefinition(fn_def) => err(ME::FnInExpr {
                 span: fn_def.fn_name.span,
@@ -188,7 +231,7 @@ impl BasicBlock {
                 let IdentExpr(fn_name) = &fun.body else {
                     err(ME::CallNotIdent { span: ex.span })?
                 };
-                let Some(sig) = ctx.fn_table.get(fn_name) else {
+                let Some(sig) = self.top_ctx.fn_table.get(fn_name) else {
                     err(ME::FunctionNotFound {
                         span: ex.span,
                         name: fn_name.to_string(),
@@ -206,8 +249,8 @@ impl BasicBlock {
                 }
                 let mut args = vec![];
                 for (arg_node, param) in zip(arg_nodes, &sig.param_types) {
-                    let ip = self.add_expr(ctx, arg_node)?;
-                    let arg_type = self.get_type(ip);
+                    let ip = self.add_expr(block, arg_node)?;
+                    let arg_type = block.get_type(ip);
                     if arg_type != param.param_type {
                         err(ME::WrongArgType {
                             span: ex.span,
@@ -218,14 +261,16 @@ impl BasicBlock {
                     }
                     args.push(ip);
                 }
-                self.push(
+                block.push(
                     mir::FnCall(fn_name.to_string(), args, sig.return_type),
                     ex.span,
                 )
             }
         })
     }
+}
 
+impl BasicBlock {
     fn add_unary(&mut self, op: UnaryOp, arg: IP) -> Result<IP, Diag> {
         let arg_type = self.get_type(arg);
         let op1 = match (op.node, arg_type) {
@@ -591,7 +636,7 @@ mod build_mir_functions {
     fn param_errors() {
         check_build_mir(
             "fn f(x: i64, x: i64) -> i64 { ret f(1,1); };",
-            expect!["At (!1,1!): Duplicate parameter 'x' already defined."],
+            expect!["At 14: Duplicate parameter 'x' already defined."],
         );
         check_build_mir(
             "fn f(x: i64) -> i64 { ret y*3; }",
