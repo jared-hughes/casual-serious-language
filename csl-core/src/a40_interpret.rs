@@ -86,7 +86,13 @@ mod interpret_expr_tests {
 
     fn check_interpret_mir(input: &str, expect: Expect) {
         let program = if !input.contains("{") {
-            let ty = if input.contains(".") { "f64" } else { "i64" };
+            let ty = match () {
+                () if input.contains("<") => "bool",
+                () if input.contains(">") => "bool",
+                () if input.contains("=") => "bool",
+                () if input.contains(".") => "f64",
+                () => "i64",
+            };
             format!("fn main() -> {ty} {{ ret {input}; }}")
         } else {
             input.to_owned()
@@ -104,7 +110,14 @@ mod interpret_expr_tests {
     }
 
     #[test]
-    fn binary_operators() {
+    fn unary() {
+        check_interpret_mir("-(1 + 2)", expect!["I64(-3)"]);
+        check_interpret_mir("-(1.0 + 2.0)", expect!["F64(-3.0)"]);
+        check_interpret_mir("!(1 < 0)", expect!["Bool(true)"]);
+    }
+
+    #[test]
+    fn binary_num_num() {
         check_interpret_mir("1.0 + 2.0", expect!["F64(3.0)"]);
         check_interpret_mir("1 + 2", expect!["I64(3)"]);
         check_interpret_mir("1.0 - 2.0", expect!["F64(-1.0)"]);
@@ -119,6 +132,32 @@ mod interpret_expr_tests {
     #[test]
     fn division_is_floor() {
         check_interpret_mir("7/4", expect!["I64(1)"]);
+    }
+
+    #[test]
+    fn binary_num_bool() {
+        check_interpret_mir("1.0 < 2.0", expect!["Bool(true)"]);
+        check_interpret_mir("1.0 <= 2.0", expect!["Bool(true)"]);
+        check_interpret_mir("1.0 > 2.0", expect!["Bool(false)"]);
+        check_interpret_mir("1.0 >= 2.0", expect!["Bool(false)"]);
+        check_interpret_mir("1.0 == 2.0", expect!["Bool(false)"]);
+        check_interpret_mir("1.0 != 2.0", expect!["Bool(true)"]);
+        check_interpret_mir("1 < 2", expect!["Bool(true)"]);
+        check_interpret_mir("1 <= 2", expect!["Bool(true)"]);
+        check_interpret_mir("1 > 2", expect!["Bool(false)"]);
+        check_interpret_mir("1 >= 2", expect!["Bool(false)"]);
+        check_interpret_mir("1 == 2", expect!["Bool(false)"]);
+        check_interpret_mir("1 != 2", expect!["Bool(true)"]);
+    }
+
+    #[test]
+    fn binary_bool_bool() {
+        check_interpret_mir("(0 > 0) < (1 > 0)", expect!["Bool(true)"]);
+        check_interpret_mir("(0 > 0) <= (1 > 0)", expect!["Bool(true)"]);
+        check_interpret_mir("(0 > 0) > (1 > 0)", expect!["Bool(false)"]);
+        check_interpret_mir("(0 > 0) >= (1 > 0)", expect!["Bool(false)"]);
+        check_interpret_mir("(0 > 0) == (1 > 0)", expect!["Bool(false)"]);
+        check_interpret_mir("(0 > 0) != (1 > 0)", expect!["Bool(true)"]);
     }
 }
 

@@ -10,11 +10,17 @@ use std::iter::Peekable;
 enum BindingPower {
     // Inside parens
     Top,
+    // ||
+    Or,
+    // &&
+    And,
+    // <, <=, ==, !=, >=, >
+    Compare,
     // +, -
     Add,
     // *, /
     Mul,
-    // +, - but prefix
+    // !, prefix -
     Prefix,
     // f()
     Call,
@@ -205,10 +211,17 @@ impl<'a> Parser<'a> {
                 let s = span(start.span.lo, inner.span.hi);
                 Ok(expr(ast::Unary(unop, inner), s))
             }
+            KwFn => self.parse_fn(start),
+            KwLet => self.parse_let(start),
+            Bang => {
+                let inner = self.parse_main(BindingPower::Prefix)?;
+                let unop = respan(ast::UnaryOpKind::Not, start.span);
+                let s = span(start.span.lo, inner.span.hi);
+                Ok(expr(ast::Unary(unop, inner), s))
+            }
             BinOp(_) => err(PE::UnexpectedBinaryInitial.span(start.span)),
             CloseDelim(Parenthesis) => err(PE::UnmatchedCloseParen.span(start.span)),
             Eof => err(PE::UnexpectedEOF.span(start.span)),
-            Whitespace | Invalid(_) => panic!("Whitespace should be skipped"),
             OpenDelim(CurlyBrace)
             | CloseDelim(CurlyBrace)
             | Colon
@@ -216,8 +229,7 @@ impl<'a> Parser<'a> {
             | ThinArrow
             | Semi
             | Equals => err(PE::GeneralUnexpected.span(start.span)),
-            KwFn => self.parse_fn(start),
-            KwLet => self.parse_let(start),
+            Whitespace | Invalid(_) => panic!("Whitespace should be skipped"),
         }
     }
 
@@ -254,7 +266,16 @@ impl<'a> Parser<'a> {
     fn parse_binop(&mut self, left: Bexpr, tok: BinOpToken, sp: Span) -> ExprResult {
         // All operations are left-assocative.
         // Subtract one from the binding power here if you want right-associative.
-        let right = self.parse_main(binop_power(tok))?;
+        let pow = binop_power(tok);
+        let right = self.parse_main(pow)?;
+        // Special case: Don't allow 1 < 2 < 3
+        if pow == BindingPower::Compare {
+            if let ast::Binary(left_kind, ..) = left.body {
+                if let ast::Compare(..) = left_kind.node {
+                    err(PE::ComparatorChainDisallowed.span(sp))?;
+                }
+            }
+        }
         let binop = respan(translate_binop(tok), sp);
         let s = span(left.span.lo, right.span.hi);
         return Ok(expr(ast::Binary(binop, left, right), s));
@@ -361,11 +382,22 @@ fn binop_power(t: BinOpToken) -> BindingPower {
     match t {
         Plus | Minus => BindingPower::Add,
         Star | Slash => BindingPower::Mul,
+        Lt | LtEq | Gt | GtEq | Neq | EqEq => BindingPower::Compare,
+        And => BindingPower::And,
+        Or => BindingPower::Or,
     }
 }
 
 fn translate_binop(t: BinOpToken) -> ast::BinOpKind {
     match t {
+        And => ast::And,
+        Or => ast::Or,
+        Lt => ast::Compare(ast::Lt),
+        LtEq => ast::Compare(ast::LtEq),
+        Gt => ast::Compare(ast::Gt),
+        GtEq => ast::Compare(ast::GtEq),
+        Neq => ast::Compare(ast::Neq),
+        EqEq => ast::Compare(ast::Eq),
         Plus => ast::Add,
         Minus => ast::Sub,
         Star => ast::Mul,
@@ -381,7 +413,7 @@ fn terminates_block(tok: TokenKind) -> bool {
     match tok {
         CloseDelim(_) | Eof | Invalid(_) => true,
         Semi | BinOp(_) | OpenDelim(_) | ThinArrow | Comma | Literal(_) | Colon | Ident(_)
-        | KwFn | KwRet | KwLet | Equals => false,
+        | KwFn | KwRet | KwLet | Equals | Bang => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }
@@ -392,7 +424,9 @@ fn terminates_block(tok: TokenKind) -> bool {
 /// "Expected )" instead of "Expected ','" in an error message.
 fn terminates_fn_params(tok: TokenKind) -> bool {
     match tok {
-        BinOp(_) | OpenDelim(_) | CloseDelim(_) | Eof | ThinArrow | Invalid(_) | Semi => true,
+        Bang | BinOp(_) | OpenDelim(_) | CloseDelim(_) | Eof | ThinArrow | Invalid(_) | Semi => {
+            true
+        }
         Comma | Literal(_) | Colon | Ident(_) | KwFn | KwRet | KwLet | Equals => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
@@ -502,6 +536,327 @@ mod parser_expr_tests {
                         (4)Ident("x"),
                     ),
                 )"#]],
+        );
+        check_parsing(
+            "!!!x",
+            expect![[r#"
+                (1-4)Unary[Not(1)](
+                    (2-4)Unary[Not(2)](
+                        (3-4)Unary[Not(3)](
+                            (4)Ident("x"),
+                        ),
+                    ),
+                )"#]],
+        );
+    }
+
+    #[test]
+    fn precedence_adjacent() {
+        // Top < Or
+        check_parsing(
+            "(x || y)",
+            expect![[r#"
+            (1-8)paren@(2-7)Binary[Or(4-5)](
+                (2)Ident("x"),
+                (7)Ident("y"),
+            )"#]],
+        );
+        // Or < And
+        check_parsing(
+            "x && y || z && w",
+            expect![[r#"
+            (1-16)Binary[Or(8-9)](
+                (1-6)Binary[And(3-4)](
+                    (1)Ident("x"),
+                    (6)Ident("y"),
+                ),
+                (11-16)Binary[And(13-14)](
+                    (11)Ident("z"),
+                    (16)Ident("w"),
+                ),
+            )"#]],
+        );
+        // And < Compare
+        check_parsing(
+            "x == w && y < z",
+            expect![[r#"
+            (1-15)Binary[And(8-9)](
+                (1-6)Binary[Compare(Eq)(3-4)](
+                    (1)Ident("x"),
+                    (6)Ident("w"),
+                ),
+                (11-15)Binary[Compare(Lt)(13)](
+                    (11)Ident("y"),
+                    (15)Ident("z"),
+                ),
+            )"#]],
+        );
+        check_parsing(
+            "y >= z && x != w",
+            expect![[r#"
+            (1-16)Binary[And(8-9)](
+                (1-6)Binary[Compare(GtEq)(3-4)](
+                    (1)Ident("y"),
+                    (6)Ident("z"),
+                ),
+                (11-16)Binary[Compare(Neq)(13-14)](
+                    (11)Ident("x"),
+                    (16)Ident("w"),
+                ),
+            )"#]],
+        );
+        // Compare < Add
+        check_parsing(
+            "x + y == w + z",
+            expect![[r#"
+            (1-14)Binary[Compare(Eq)(7-8)](
+                (1-5)Binary[Add(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (10-14)Binary[Add(12)](
+                    (10)Ident("w"),
+                    (14)Ident("z"),
+                ),
+            )"#]],
+        );
+        check_parsing(
+            "x - y < w - z",
+            expect![[r#"
+            (1-13)Binary[Compare(Lt)(7)](
+                (1-5)Binary[Sub(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9-13)Binary[Sub(11)](
+                    (9)Ident("w"),
+                    (13)Ident("z"),
+                ),
+            )"#]],
+        );
+        // Add < Mul
+        check_parsing(
+            "x * y + z * w",
+            expect![[r#"
+            (1-13)Binary[Add(7)](
+                (1-5)Binary[Mul(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9-13)Binary[Mul(11)](
+                    (9)Ident("z"),
+                    (13)Ident("w"),
+                ),
+            )"#]],
+        );
+        check_parsing(
+            "x / y - z / w",
+            expect![[r#"
+            (1-13)Binary[Sub(7)](
+                (1-5)Binary[Div(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9-13)Binary[Div(11)](
+                    (9)Ident("z"),
+                    (13)Ident("w"),
+                ),
+            )"#]],
+        );
+        // Mul < Prefix
+        check_parsing(
+            "-x * -y",
+            expect![[r#"
+            (1-7)Binary[Mul(4)](
+                (1-2)Unary[Neg(1)](
+                    (2)Ident("x"),
+                ),
+                (6-7)Unary[Neg(6)](
+                    (7)Ident("y"),
+                ),
+            )"#]],
+        );
+        // Prefix < Call
+        check_parsing(
+            "-f(x)",
+            expect![[r#"
+            (1-5)Unary[Neg(1)](
+                (2-5)call((2)Ident("f"))(
+                    (4)Ident("x"),
+                ),
+            )"#]],
+        );
+        check_parsing(
+            "!f(x)",
+            expect![[r#"
+            (1-5)Unary[Not(1)](
+                (2-5)call((2)Ident("f"))(
+                    (4)Ident("x"),
+                ),
+            )"#]],
+        );
+    }
+
+    #[test]
+    fn precedence_misc() {
+        // Mul < Call
+        check_parsing(
+            "x*y (x)",
+            expect![[r#"
+            (1-7)Binary[Mul(2)](
+                (1)Ident("x"),
+                (3-7)call((3)Ident("y"))(
+                    (6)Ident("x"),
+                ),
+            )"#]],
+        );
+        // Call inner < Or
+        check_parsing(
+            "f(x || y)",
+            expect![[r#"
+            (1-9)call((1)Ident("f"))(
+                (3-8)Binary[Or(5-6)](
+                    (3)Ident("x"),
+                    (8)Ident("y"),
+                ),
+            )"#]],
+        );
+    }
+
+    #[test]
+    fn associativity() {
+        // Or
+        check_parsing(
+            "x || y || z",
+            expect![[r#"
+            (1-11)Binary[Or(8-9)](
+                (1-6)Binary[Or(3-4)](
+                    (1)Ident("x"),
+                    (6)Ident("y"),
+                ),
+                (11)Ident("z"),
+            )"#]],
+        );
+        // And
+        check_parsing(
+            "x && y && z",
+            expect![[r#"
+            (1-11)Binary[And(8-9)](
+                (1-6)Binary[And(3-4)](
+                    (1)Ident("x"),
+                    (6)Ident("y"),
+                ),
+                (11)Ident("z"),
+            )"#]],
+        );
+        // Compare
+        check_parsing(
+            "x == y == z",
+            expect!["At 8-9: Chaining comparison operations is not yet supported."],
+        );
+        check_parsing(
+            "x != y > z",
+            expect!["At 8: Chaining comparison operations is not yet supported."],
+        );
+        check_parsing(
+            "x < y != z",
+            expect!["At 7-8: Chaining comparison operations is not yet supported."],
+        );
+        check_parsing(
+            "x < y < z",
+            expect!["At 7: Chaining comparison operations is not yet supported."],
+        );
+        check_parsing(
+            "x < y <= z",
+            expect!["At 7-8: Chaining comparison operations is not yet supported."],
+        );
+        check_parsing(
+            "x >= y >= z",
+            expect!["At 8-9: Chaining comparison operations is not yet supported."],
+        );
+        // Add
+        check_parsing(
+            "x + y + z",
+            expect![[r#"
+            (1-9)Binary[Add(7)](
+                (1-5)Binary[Add(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9)Ident("z"),
+            )"#]],
+        );
+        check_parsing(
+            "x - y - z",
+            expect![[r#"
+            (1-9)Binary[Sub(7)](
+                (1-5)Binary[Sub(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9)Ident("z"),
+            )"#]],
+        );
+        // Mul
+        check_parsing(
+            "x * y / z",
+            expect![[r#"
+            (1-9)Binary[Div(7)](
+                (1-5)Binary[Mul(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9)Ident("z"),
+            )"#]],
+        );
+        check_parsing(
+            "x / y * z",
+            expect![[r#"
+            (1-9)Binary[Mul(7)](
+                (1-5)Binary[Div(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9)Ident("z"),
+            )"#]],
+        );
+        check_parsing(
+            "x / y / z",
+            expect![[r#"
+            (1-9)Binary[Div(7)](
+                (1-5)Binary[Div(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9)Ident("z"),
+            )"#]],
+        );
+        check_parsing(
+            "x * y * z",
+            expect![[r#"
+            (1-9)Binary[Mul(7)](
+                (1-5)Binary[Mul(3)](
+                    (1)Ident("x"),
+                    (5)Ident("y"),
+                ),
+                (9)Ident("z"),
+            )"#]],
+        );
+        // Prefix
+        check_parsing(
+            "!-!-!x",
+            expect![[r#"
+            (1-6)Unary[Not(1)](
+                (2-6)Unary[Neg(2)](
+                    (3-6)Unary[Not(3)](
+                        (4-6)Unary[Neg(4)](
+                            (5-6)Unary[Not(5)](
+                                (6)Ident("x"),
+                            ),
+                        ),
+                    ),
+                ),
+            )"#]],
         );
     }
 

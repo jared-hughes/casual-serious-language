@@ -37,6 +37,7 @@ impl Ctx {
         Ok(match ty.name.as_str() {
             "i64" => Type::I64,
             "f64" => Type::F64,
+            "bool" => Type::Bool,
             _ => {
                 return err(ME::UnrecognizedTypeName {
                     span: ty.span,
@@ -230,9 +231,7 @@ impl BasicBlock {
         let op1 = match (op.node, arg_type) {
             (Neg, I64) => OP1::NegI64,
             (Neg, F64) => OP1::NegF64,
-            // Since the only types are i64 and f64, we can't represent an
-            // incorrectly-typed unary operation :P
-            #[allow(unreachable_patterns)]
+            (Not, Bool) => OP1::NotBool,
             (_, _) => err(ME::InvalidTypeUnary {
                 span: op.span,
                 op,
@@ -246,14 +245,36 @@ impl BasicBlock {
         let left_type = self.get_type(left);
         let right_type = self.get_type(right);
         let op2 = match (op.node, left_type, right_type) {
+            /* i64 */
             (Add, I64, I64) => OP2::AddI64,
-            (Add, F64, F64) => OP2::AddF64,
             (Sub, I64, I64) => OP2::SubI64,
-            (Sub, F64, F64) => OP2::SubF64,
             (Mul, I64, I64) => OP2::MulI64,
-            (Mul, F64, F64) => OP2::MulF64,
             (Div, I64, I64) => OP2::DivI64,
+            (Compare(Lt), I64, I64) => OP2::LtI64,
+            (Compare(LtEq), I64, I64) => OP2::LtEqI64,
+            (Compare(Gt), I64, I64) => OP2::GtI64,
+            (Compare(GtEq), I64, I64) => OP2::GtEqI64,
+            (Compare(Neq), I64, I64) => OP2::NeqI64,
+            (Compare(Eq), I64, I64) => OP2::EqI64,
+            /* f64 */
+            (Add, F64, F64) => OP2::AddF64,
+            (Sub, F64, F64) => OP2::SubF64,
+            (Mul, F64, F64) => OP2::MulF64,
             (Div, F64, F64) => OP2::DivF64,
+            (Compare(Lt), F64, F64) => OP2::LtF64,
+            (Compare(LtEq), F64, F64) => OP2::LtEqF64,
+            (Compare(Gt), F64, F64) => OP2::GtF64,
+            (Compare(GtEq), F64, F64) => OP2::GtEqF64,
+            (Compare(Neq), F64, F64) => OP2::NeqF64,
+            (Compare(Eq), F64, F64) => OP2::EqF64,
+            /* bool */
+            (Compare(Lt), Bool, Bool) => OP2::LtBool,
+            (Compare(LtEq), Bool, Bool) => OP2::LtEqBool,
+            (Compare(Gt), Bool, Bool) => OP2::GtBool,
+            (Compare(GtEq), Bool, Bool) => OP2::GtEqBool,
+            (Compare(Neq), Bool, Bool) => OP2::NeqBool,
+            (Compare(Eq), Bool, Bool) => OP2::EqBool,
+            /* bad */
             (_, _, _) => err(ME::InvalidTypeBinary {
                 span: op.span,
                 op,
@@ -283,7 +304,13 @@ mod build_mir_expr_block {
 
     fn check_build_mir(input: &str, expect: Expect) {
         let program = if !input.contains("{") {
-            let ty = if input.contains(".") { "f64" } else { "i64" };
+            let ty = match () {
+                () if input.contains("<") => "bool",
+                () if input.contains(">") => "bool",
+                () if input.contains("=") => "bool",
+                () if input.contains(".") => "f64",
+                () => "i64",
+            };
             format!("fn f() -> {ty} {{ ret {input}; }}")
         } else {
             input.to_owned()
@@ -399,6 +426,41 @@ mod build_mir_expr_block {
                    1: i64 Literal(Integer(2))
                    2: i64 Binary(DivI64, IP(0), IP(1))"#]],
         );
+        check_build_mir(
+            "1 < 2",
+            expect![[r#"
+                BasicBlock
+                   0: i64 Literal(Integer(1))
+                   1: i64 Literal(Integer(2))
+                   2: bool Binary(LtI64, IP(0), IP(1))"#]],
+        );
+        check_build_mir(
+            "1.0 < 2.0",
+            expect![[r#"
+                BasicBlock
+                   0: f64 Literal(Float(1.0))
+                   1: f64 Literal(Float(2.0))
+                   2: bool Binary(LtF64, IP(0), IP(1))"#]],
+        );
+        check_build_mir(
+            "(1>0) <= (2.0>1.0)",
+            expect![[r#"
+                BasicBlock
+                   0: i64 Literal(Integer(1))
+                   1: i64 Literal(Integer(0))
+                   2: bool Binary(GtI64, IP(0), IP(1))
+                   3: f64 Literal(Float(2.0))
+                   4: f64 Literal(Float(1.0))
+                   5: bool Binary(GtF64, IP(3), IP(4))
+                   6: bool Binary(LtEqBool, IP(2), IP(5))"#]],
+        );
+    }
+
+    #[test]
+    fn type_error_unary() {
+        check_build_mir("!1", expect!["At 21: Type error: Cannot perform !i64"]);
+        check_build_mir("!1.0", expect!["At 21: Type error: Cannot perform !f64"]);
+        check_build_mir("-(0<1)", expect!["At 22: Type error: Cannot perform -bool"]);
     }
 
     #[test]
@@ -434,6 +496,14 @@ mod build_mir_expr_block {
         check_build_mir(
             "1 / 2.0",
             expect!["At 23: Type error: Cannot perform i64 / f64"],
+        );
+        check_build_mir(
+            "1 < 2.0",
+            expect!["At 24: Type error: Cannot perform i64 < f64"],
+        );
+        check_build_mir(
+            "(1 < 2) < 3",
+            expect!["At 30: Type error: Cannot perform bool < i64"],
         );
     }
 }

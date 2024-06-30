@@ -8,14 +8,20 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 ## Next Steps
 
+- Blocks, so you can write `{ let a = 1; ret a * a + a } + 5`
+- Branching
+- Literals `true` and `false`.
+- Compiling `a && b` to `if (a) b else false` to get correct short-circuiting.
+  - Note `&&` and `||` is not currently implemented for this reason.
 - Figure how to type consequent parsing better. (macros?)
 - Compile portions of the code better (don't stop on the first err, allow for error nodes / IPs)
 - Better Symbol table handling (ugly inside `a35_mir` rn.)
 - Find some way to guarantee all error messages are tested.
-  - Panic for runtime errors instead of propagating `Result`.
+- Panic for runtime errors instead of propagating `Result`.
 - Generalize scanning for comma-separated things (function params, function args).
 - Try symbol/string interning
 - Change `/` to true division, add `//` for floor division
+- Chaining comparison operations
 
 Maybe sometime: Compile instead of interpret
 
@@ -23,7 +29,7 @@ Maybe sometime: Compile instead of interpret
 
 The WIP is so far from these actually being relevant:
 
-1. Easy to look up the definition of any function. If you see `.repr()` in the source, it's clear exactly what lines implement it. So there will be no VTable generation, and no class inheritance.
+1. Easy to look up the definition of any function. If you see `.repr()` in the source, it's clear exactly what lines implement it. So there will be no VTable generation, and no class dynamic dispatch.
 2. No hidden performance pitfalls. Don't implement a convenience feature (`.map()`) if it's much slower than the corresponding longhand (`for ()`).
 3. Memory management is automatic, but in accordance with avoiding performance pitfalls, the programmer may still need to think about it a little (but less than they think about borrow checking in Rust).
 4. Expressions read from top-to-bottom, left-to-right. No significant distinction between statements and expressions.

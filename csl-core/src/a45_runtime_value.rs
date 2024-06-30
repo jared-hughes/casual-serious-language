@@ -7,6 +7,7 @@ pub use RuntimeValue::*;
 pub enum RuntimeValue {
     I64(i64),
     F64(f64),
+    Bool(bool),
 }
 
 pub type RuntimeResult = Result<RuntimeValue, Diag>;
@@ -16,6 +17,7 @@ impl RuntimeValue {
         match self {
             I64(_) => Type::I64,
             F64(_) => Type::F64,
+            Bool(_) => Type::Bool,
         }
     }
 }
@@ -25,6 +27,7 @@ impl fmt::Display for RuntimeValue {
         match self {
             I64(x) => write!(f, "{x}"),
             F64(x) => write!(f, "{x}"),
+            Bool(x) => write!(f, "{x}"),
         }
     }
 }

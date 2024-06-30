@@ -156,7 +156,64 @@ impl<'a> RawLexer<'a> {
             ',' => Comma,
             ':' => Colon,
             ';' => Semi,
-            '=' => Equals,
+            '!' => match self.peek() {
+                '=' => {
+                    self.consume();
+                    BinOp(Neq)
+                }
+                _ => Bang,
+            },
+            '=' => match self.peek() {
+                '=' => {
+                    self.consume();
+                    BinOp(EqEq)
+                }
+                '>' => {
+                    self.consume();
+                    invalid("Greater-than-equals is written as '>=', not '=>'.")
+                }
+                '<' => {
+                    self.consume();
+                    invalid("Less-than-equals is written as '<=', not '=<'.")
+                }
+                _ => Equals,
+            },
+            '<' => match self.peek() {
+                '=' => {
+                    self.consume();
+                    BinOp(LtEq)
+                }
+                '<' => {
+                    self.consume();
+                    invalid("Bit-shift-left ('<<') is not yet supported.")
+                }
+                _ => BinOp(Lt),
+            },
+            '>' => match self.peek() {
+                '=' => {
+                    self.consume();
+                    BinOp(GtEq)
+                }
+                '>' => {
+                    self.consume();
+                    invalid("Bit-shift-right ('>>') is not yet supported.")
+                }
+                _ => BinOp(Gt),
+            },
+            '&' => match self.peek() {
+                '&' => {
+                    self.consume();
+                    BinOp(And)
+                }
+                _ => invalid("Bitwise AND ('&') is not yet supported."),
+            },
+            '|' => match self.peek() {
+                '|' => {
+                    self.consume();
+                    BinOp(Or)
+                }
+                _ => invalid("Bitwise OR ('|') is not yet supported."),
+            },
 
             // TODO: actually say what the character is.
             _ => invalid("Unrecognized character."),

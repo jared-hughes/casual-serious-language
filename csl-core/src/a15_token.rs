@@ -14,6 +14,22 @@ pub enum Lit {
 pub use BinOpToken::*;
 #[derive(Debug, Clone, Copy)]
 pub enum BinOpToken {
+    /// `&&`
+    And,
+    /// `||`
+    Or,
+    /// `<`
+    Lt,
+    /// `<=`
+    LtEq,
+    /// `>`
+    Gt,
+    /// `>=`
+    GtEq,
+    /// `!=`
+    Neq,
+    /// `==`
+    EqEq,
     /// `+`
     Plus,
     /// `-`
@@ -54,6 +70,8 @@ pub enum TokenKind<'a> {
     Comma,
     /// '->'
     ThinArrow,
+    /// '!'
+    Bang,
 
     /* Keywords */
     /// 'fn'

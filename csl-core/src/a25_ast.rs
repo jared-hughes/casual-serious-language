@@ -2,9 +2,45 @@ use crate::span::{Span, Spanned};
 pub use crate::token::Lit;
 use std::fmt;
 
+pub use CompareOpKind::*;
+#[derive(Clone, Copy, Debug)]
+pub enum CompareOpKind {
+    /// `<`
+    Lt,
+    /// `<=`
+    LtEq,
+    /// `>`
+    Gt,
+    /// `>=`
+    GtEq,
+    /// `!=`
+    Neq,
+    /// `==`
+    Eq,
+}
+
+impl fmt::Display for CompareOpKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Lt => "<",
+            LtEq => "<=",
+            Gt => ">",
+            GtEq => ">=",
+            Neq => "!=",
+            Eq => "==",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 pub use BinOpKind::*;
 #[derive(Clone, Copy, Debug)]
 pub enum BinOpKind {
+    Compare(CompareOpKind),
+    /// Boolean OR (`||`)
+    Or,
+    /// Boolean AND (`&&`)
+    And,
     /// Addition (`+`)
     Add,
     /// Subtraction (`-`)
@@ -18,10 +54,18 @@ pub enum BinOpKind {
 impl fmt::Display for BinOpKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
+            Or => "||",
+            And => "&&",
             Add => "+",
             Sub => "-",
             Mul => "*",
             Div => "/",
+            Compare(Lt) => "<",
+            Compare(LtEq) => "<=",
+            Compare(Gt) => ">",
+            Compare(GtEq) => ">=",
+            Compare(Neq) => "!=",
+            Compare(Eq) => "==",
         };
         write!(f, "{}", s)
     }
@@ -34,12 +78,15 @@ pub use UnaryOpKind::*;
 pub enum UnaryOpKind {
     /// Negation (`-`)
     Neg,
+    /// Not (`!`)
+    Not,
 }
 
 impl fmt::Display for UnaryOpKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             Neg => "-",
+            Not => "!",
         };
         write!(f, "{}", s)
     }

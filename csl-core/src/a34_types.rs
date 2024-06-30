@@ -7,6 +7,8 @@ pub enum Type {
     I64,
     /// A 64-bit float (binary64 from IEEE-754).
     F64,
+    /// A boolean value
+    Bool,
 }
 
 impl fmt::Display for Type {
@@ -14,6 +16,7 @@ impl fmt::Display for Type {
         let s = match self {
             I64 => "i64",
             F64 => "f64",
+            Bool => "bool",
         };
         write!(f, "{}", s)
     }

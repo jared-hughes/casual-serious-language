@@ -66,6 +66,9 @@ NegI64 => fn add_i64(x=xv: I64) -> I64 {
 NegF64 => fn add_f64(x=xv: F64) -> F64 {
     -x
 }
+NotBool => fn not_bool(x=xv: Bool) -> Bool {
+    !x
+}
 }
 
 // Each function definition inside the macro here produces:
@@ -79,6 +82,7 @@ NegF64 => fn add_f64(x=xv: F64) -> F64 {
 //      the function generated in (1).
 def_int! {
 [OP2, Intrinsic2, TypeAssertionFailedBinary]
+/* i64 */
 AddI64 => fn add_i64(a=av: I64, b=bv: I64) -> I64 {
     a + b
 }
@@ -91,6 +95,26 @@ MulI64 => fn mul_i64(a=av: I64, b=bv: I64) -> I64 {
 DivI64 => fn div_i64(a=av: I64, b=bv: I64) -> I64 {
     a / b
 }
+LtI64 => fn lt_i64(a=av: I64, b=bv: I64) -> Bool {
+    a < b
+}
+LtEqI64 => fn lteq_i64(a=av: I64, b=bv: I64) -> Bool {
+    a <= b
+}
+GtI64 => fn gt_i64(a=av: I64, b=bv: I64) -> Bool {
+    a > b
+}
+GtEqI64 => fn gteq_i64(a=av: I64, b=bv: I64) -> Bool {
+    a >= b
+}
+NeqI64 => fn neq_i64(a=av: I64, b=bv: I64) -> Bool {
+    a != b
+}
+EqI64 => fn eq_i64(a=av: I64, b=bv: I64) -> Bool {
+    a == b
+}
+
+/* f64 */
 AddF64 => fn add_f64(a=av: F64, b=bv: F64) -> F64 {
     a + b
 }
@@ -102,5 +126,43 @@ MulF64 => fn mul_f64(a=av: F64, b=bv: F64) -> F64 {
 }
 DivF64 => fn div_f64(a=av: F64, b=bv: F64) -> F64 {
     a / b
+}
+LtF64 => fn lt_f64(a=av: F64, b=bv: F64) -> Bool {
+    a < b
+}
+LtEqF64 => fn lteq_f64(a=av: F64, b=bv: F64) -> Bool {
+    a <= b
+}
+GtF64 => fn gt_f64(a=av: F64, b=bv: F64) -> Bool {
+    a > b
+}
+GtEqF64 => fn gteq_f64(a=av: F64, b=bv: F64) -> Bool {
+    a >= b
+}
+NeqF64 => fn neq_f64(a=av: F64, b=bv: F64) -> Bool {
+    a != b
+}
+EqF64 => fn eq_f64(a=av: F64, b=bv: F64) -> Bool {
+    a == b
+}
+
+/* bool */
+LtBool => fn lt_bool(a=av: Bool, b=bv: Bool) -> Bool {
+    a < b
+}
+LtEqBool => fn lteq_bool(a=av: Bool, b=bv: Bool) -> Bool {
+    a <= b
+}
+GtBool => fn gt_bool(a=av: Bool, b=bv: Bool) -> Bool {
+    a > b
+}
+GtEqBool => fn gteq_bool(a=av: Bool, b=bv: Bool) -> Bool {
+    a >= b
+}
+NeqBool => fn neq_bool(a=av: Bool, b=bv: Bool) -> Bool {
+    a != b
+}
+EqBool => fn eq_bool(a=av: Bool, b=bv: Bool) -> Bool {
+    a == b
 }
 }

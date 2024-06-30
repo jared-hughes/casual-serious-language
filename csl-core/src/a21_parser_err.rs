@@ -22,6 +22,9 @@ ExpectedSemi => format!("Expected semicolon to end the statement"),
 FnExpectedName => {
     format!("Expected identifier. Functions must have a name. {EXAMPLE_FN}")
 },
+ComparatorChainDisallowed => {
+    format!("Chaining comparison operations is not yet supported.")
+},
 }
 
 def_token_errors! {

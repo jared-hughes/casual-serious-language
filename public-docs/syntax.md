@@ -2,18 +2,26 @@
 
 ## Expressions
 
+Numbers and stuff
+
 - Integer literals: `12`, `1e3` (currently these are 64-bit signed)
 - Float literals: `1.0`, `1.2e3`, `1.2e-4` (these are 64-bit floats)
 - Add/subtract/multiply: `1 + 2`, `1 - 2`, `1 * 2`
 - Divide: `1 / 2`
   - It is floor division for integers and truncated division for floats. TODO: pull a Python and make `/` consistently true division, and `//` consistently floor division.
 - Unary negative: `-2`
+
+Booleans
+
+- Comparison: `1 < 2`, `3 >= 3`, `3 == 3`, `4 != 2`.
+- Boolean NOT: `!(3 < 2)`.
+- Planned: `true` and `false`
+- Planned: `true && true` and `false || false`
+
+Misc
+
 - Parentheses for grouping: `(1 + 2) * 3`
-- Identifiers: `abc` (currently unusable).
-
-## Semicolons
-
-Currently, semicolons are required after each statement (besides functions, which end in a curly brace `}`).
+- Identifiers: `abc`.
 
 ## Functions
 
@@ -41,6 +49,8 @@ fn sum_square(x: f64, y: f64) -> f64 {
 ```
 
 ## Optional Semicolons (not yet implemented)
+
+Currently, semicolons are required after each statement (besides functions, which end in a curly brace `}`).
 
 The plan is to eventually make semicolons optional everywhere (but suggested -- a hypothetical auto-formatter would insert them).
 
