@@ -23,7 +23,7 @@ jobs:
         run: (cd site && npm ci)
 
       - name: Build for web
-        run: ./build-site.sh
+        run: ./scripts/build-site.sh
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4.6.1

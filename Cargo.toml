@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+    "csl-cli",
+    "csl-core",
+    "csl-web",
+]
