@@ -15,7 +15,7 @@ pub enum RuntimeValue {
 pub type RuntimeResult = Result<RuntimeValue, Diag>;
 
 impl RuntimeValue {
-    pub(crate) fn to_type(&self) -> Type {
+    pub(crate) fn get_type(&self) -> Type {
         match self {
             I64(_) => Type::I64,
             F64(_) => Type::F64,

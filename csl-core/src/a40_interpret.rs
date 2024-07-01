@@ -41,7 +41,7 @@ impl<'prog> Interpreter<'prog> {
         }
         let mut mem: IndexVec<IP, RuntimeValue> = index_vec![I64(0); body.num_locals()];
         for (i, param_type) in body.params.iter().enumerate() {
-            if args[i].to_type() != *param_type {
+            if args[i].get_type() != *param_type {
                 Err(RE::IncorrectArgs(fn_name.to_string()).span(DUMMY_SPAN))?;
             }
             mem[i] = args[i];
@@ -68,7 +68,7 @@ impl<'prog> Interpreter<'prog> {
                     block = match mem[cond] {
                         Bool(true) => true_branch,
                         Bool(false) => false_branch,
-                        _ => panic!("Invalid type in 'if' branch: '{}'.", mem[cond].to_type()),
+                        _ => panic!("Invalid type in 'if' branch: '{}'.", mem[cond].get_type()),
                     }
                 }
             }

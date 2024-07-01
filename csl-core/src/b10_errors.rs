@@ -47,6 +47,8 @@ macro_rules! def_token_errors {
     )+) => {$(
         pub(crate) struct $Err $def
         impl $Err {
+            // Only used via a macro, which Clippy doesn't find.
+            #[allow(unused)]
             pub(crate) fn span(self, span: Span) -> Spanned<$Err> {
                 Spanned {node: self, span}
             }

@@ -1,7 +1,4 @@
-pub(crate) use crate::ast::{
-    BinOpKind,
-    Lit::{self, *},
-};
+pub(crate) use crate::ast::Lit;
 use crate::{
     intrinsics::{OP1, OP2},
     span::Span,
@@ -122,7 +119,7 @@ impl FnBody {
     }
 
     pub(crate) fn push_constant(&mut self, block: BP, val: RuntimeValue, span: Span) -> IP {
-        self.push_assign_new_ip(block, Literal(val), val.to_type(), span)
+        self.push_assign_new_ip(block, Literal(val), val.get_type(), span)
     }
 
     pub(crate) fn push_constant_bi(
@@ -132,16 +129,6 @@ impl FnBody {
         span: Span,
     ) -> (BP, IP) {
         (block, self.push_constant(block, val, span))
-    }
-
-    pub(crate) fn assign_new_ip(
-        &mut self,
-        block: BP,
-        inst: RValue,
-        ty: Type,
-        span: Span,
-    ) -> (BP, IP) {
-        (block, self.push_assign_new_ip(block, inst, ty, span))
     }
 
     pub(crate) fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {

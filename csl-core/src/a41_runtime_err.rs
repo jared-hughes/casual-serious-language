@@ -50,13 +50,13 @@ impl Diagnostic for RuntimeError {
             TypeAssertionFailedUnary(x) => format!(
                 "Runtime Type Error: Tried to execute {:#?} on {}.",
                 x.op,
-                x.args.to_type()
+                x.args.get_type()
             ),
             TypeAssertionFailedBinary(x) => format!(
                 "Runtime Type Error: Tried to execute {:#?} on {} and {}.",
                 x.op,
-                x.args.0.to_type(),
-                x.args.1.to_type()
+                x.args.0.get_type(),
+                x.args.1.get_type()
             ),
             MissingFunction(name) => {
                 format!(
