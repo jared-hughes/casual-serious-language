@@ -2,11 +2,11 @@ pub use crate::ast::{
     BinOpKind,
     Lit::{self, *},
 };
-use crate::types::Type;
 use crate::{
     intrinsics::{OP1, OP2},
     span::Span,
 };
+use crate::{runtime_value::RuntimeValue, types::Type};
 use index_vec::{index_vec, IndexVec};
 use std::collections::HashMap;
 use std::fmt;
@@ -15,16 +15,15 @@ pub use RValue::*;
 #[derive(Clone, Debug)]
 pub enum RValue {
     /// e.g. `1.0`;
-    Literal(Lit),
+    Literal(RuntimeValue),
     /// Pass through the argument unchanged.
-    /// TODO: Don't want to include type here, and on FnCall.
-    Use(IP, Type),
+    Use(IP),
     /// e.g. `-x`
     Unary(OP1, IP),
     /// e.g. `x + y`
     Binary(OP2, IP, IP),
     /// e.g. `f(x)`
-    FnCall(String, Vec<IP>, Type),
+    FnCall(String, Vec<IP>),
 }
 
 pub use Statement::*;
@@ -109,24 +108,27 @@ impl FnBody {
     }
 
     /// Create a new IP (local var) and assign to it.
-    pub fn push_assign_new_ip(&mut self, block: BP, inst: RValue, span: Span) -> IP {
+    pub fn push_assign_new_ip(&mut self, block: BP, inst: RValue, ty: Type, span: Span) -> IP {
         assert!(block < self.blocks.len());
-        let value_type = self.compute_type(&inst);
-        let ip = self.push_local(value_type);
+        let ip = self.push_local(ty);
         self.blocks[block].stmts.push(Assign(ip, inst, span));
         ip
     }
 
-    pub fn assign_new_ip(&mut self, block: BP, inst: RValue, span: Span) -> (BP, IP) {
-        assert!(block < self.blocks.len());
-        let value_type = self.compute_type(&inst);
-        let ip = self.push_local(value_type);
-        self.blocks[block].stmts.push(Assign(ip, inst, span));
-        (block, ip)
+    pub fn push_constant(&mut self, block: BP, val: RuntimeValue, span: Span) -> IP {
+        self.push_assign_new_ip(block, Literal(val), val.to_type(), span)
+    }
+
+    pub fn push_constant_bi(&mut self, block: BP, val: RuntimeValue, span: Span) -> (BP, IP) {
+        (block, self.push_constant(block, val, span))
+    }
+
+    pub fn assign_new_ip(&mut self, block: BP, inst: RValue, ty: Type, span: Span) -> (BP, IP) {
+        (block, self.push_assign_new_ip(block, inst, ty, span))
     }
 
     pub fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {
-        self.push_assign_new_ip(block, Literal(crate::ast::Lit::Unit), span)
+        self.push_constant(block, RuntimeValue::UnitValue, span)
     }
 
     /// Create a new IP (local var)
@@ -158,19 +160,6 @@ impl FnBody {
         &self.blocks[block].terminator
     }
 
-    /// Compute the return type of the instruction, and do basic sanity checks.
-    fn compute_type(&self, rval: &RValue) -> Type {
-        match *rval {
-            Use(_, value_type) => value_type,
-            Literal(Integer(_)) => Type::I64,
-            Literal(Float(_)) => Type::F64,
-            Literal(Unit) => Type::Unit,
-            Unary(op, ..) => op.get_intrinsic().return_type,
-            Binary(op, ..) => op.get_intrinsic().return_type,
-            FnCall(_, _, value_type) => value_type,
-        }
-    }
-
     fn sanity_check_assign(&self, ip: IP, rval: &RValue) {
         match *rval {
             Use(a, ..) => {
@@ -189,7 +178,7 @@ impl FnBody {
                 assert!(info.param_types.0 == self.get_type(a));
                 assert!(info.param_types.1 == self.get_type(b));
             }
-            FnCall(_, ref args, _) => {
+            FnCall(_, ref args) => {
                 for a in args {
                     assert!(a < &ip);
                 }

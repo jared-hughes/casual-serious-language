@@ -1,4 +1,5 @@
 use crate::errors::Diag;
+use crate::mir::Lit;
 use crate::types::Type;
 use std::fmt;
 
@@ -32,5 +33,13 @@ impl fmt::Display for RuntimeValue {
             Bool(x) => write!(f, "{x}"),
             UnitValue => write!(f, "()"),
         }
+    }
+}
+
+pub fn cook_lit(lit: Lit) -> RuntimeValue {
+    match lit {
+        Lit::Integer(x) => I64(x),
+        Lit::Float(x) => F64(x),
+        Lit::Unit => UnitValue,
     }
 }

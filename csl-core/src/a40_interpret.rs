@@ -77,9 +77,7 @@ impl<'prog> Interpreter<'prog> {
 
     fn eval(&self, mem: &Memory, rval: &RValue, sp: &Span) -> RuntimeResult {
         Ok(match *rval {
-            Literal(Integer(x)) => I64(x),
-            Literal(Float(x)) => F64(x),
-            Literal(Unit) => UnitValue,
+            Literal(x) => x,
             Unary(op, a_ip) => {
                 let a = mem[a_ip];
                 let info = op.get_intrinsic();
@@ -91,14 +89,14 @@ impl<'prog> Interpreter<'prog> {
                 let info = op.get_intrinsic();
                 (info.compute)(a, b).map_err(|e| e.span(*sp))?
             }
-            FnCall(ref fun, ref arg_ips, _) => {
+            FnCall(ref fun, ref arg_ips) => {
                 let mut args: Vec<RuntimeValue> = vec![];
                 for a in arg_ips {
                     args.push(mem[*a]);
                 }
                 self.run_fn(fun, args)?
             }
-            Use(ip, _) => mem[ip],
+            Use(ip) => mem[ip],
         })
     }
 }

@@ -9,7 +9,6 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 ## Next Steps
 
 - Add mutable variables, making if-without-else useful.
-- `Type` not needed inside MIR instructions. See "TODO: Don't want to include type here, and on FnCall."
 - Remove TODOs from source files, and move them here.
 - Allow typing `()` as return type of functions.
 - Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.
