@@ -89,8 +89,7 @@ impl TopCtx {
                 return err(ME::TopLevelExpr { span: stmt.span });
             };
             let name = fn_def.fn_name.name.clone();
-            let ctx = Ctx::from_top(self);
-            let block = Ctx::build_body_from_fn(&ctx, fn_def)?;
+            let block = Ctx::build_body_from_fn(self, fn_def)?;
             if self.mir_program.fns.contains_key(&name) {
                 err(ME::DuplicateFnName {
                     span: fn_def.fn_name.span,
@@ -106,52 +105,56 @@ impl TopCtx {
 /// Expression-level context
 struct Ctx<'ctx> {
     top_ctx: &'ctx TopCtx,
+    pub body: &'ctx mut mir::FnBody,
     pub symbol_table: SymbolTable<'ctx>,
 }
 
-impl<'ctx> Ctx<'ctx> {
-    fn from_top(top_ctx: &'ctx TopCtx) -> Ctx<'ctx> {
-        Ctx {
-            top_ctx,
-            symbol_table: SymbolTable::new(),
-        }
-    }
-
-    fn child(&'ctx self) -> Ctx<'ctx> {
+impl Ctx<'_> {
+    fn child(&mut self) -> Ctx<'_> {
         Ctx {
             top_ctx: self.top_ctx,
+            body: self.body,
             symbol_table: self.symbol_table.child(),
         }
     }
 }
 
 /* Expr-level */
-impl<'ctx> Ctx<'ctx> {
+impl Ctx<'_> {
     fn build_body_from_fn(
-        pctx: &'ctx Ctx<'ctx>,
+        top_ctx: &TopCtx,
         fn_def: &FunctionDefinition,
     ) -> Result<mir::FnBody, Diag> {
-        let mut ctx = pctx.child();
-        let sig = ctx.top_ctx.cook_fn_signature(fn_def)?;
+        let sig = top_ctx.cook_fn_signature(fn_def)?;
         let param_types = sig.param_types.iter().map(|x| x.param_type).collect();
         let mut body = mir::FnBody::new(param_types);
-        let block = body.new_basic_block();
+        let mut ctx = Ctx {
+            top_ctx,
+            body: &mut body,
+            symbol_table: SymbolTable::new(),
+        };
+        ctx.add_fn_def(fn_def, sig)?;
+        Ok(body)
+    }
+
+    fn add_fn_def(&mut self, fn_def: &FunctionDefinition, sig: FnSignature) -> Result<(), Diag> {
+        let block = self.body.new_basic_block();
 
         for (i, p) in sig.param_types.iter().enumerate() {
             let name = p.name.name.to_string();
             let ip = IP::from(i);
-            if ctx.symbol_table.get_symbol(&name).is_some() {
+            if self.symbol_table.get_symbol(&name).is_some() {
                 Err(ME::DuplicateParameter {
                     span: p.name.span,
                     name: name.to_owned(),
                 }
                 .into_diag())?;
             }
-            ctx.symbol_table.set_symbol(name, ip);
+            self.symbol_table.set_symbol(name, ip);
         }
 
-        let ((block, ip), ret_span) = ctx.add_stmts_ret(&mut body, block, &fn_def.body)?;
-        let return_type = body.get_type(ip);
+        let ((block, ip), ret_span) = self.add_stmts_ret(block, &fn_def.body)?;
+        let return_type = self.body.get_type(ip);
         if return_type != sig.return_type {
             err(ME::WrongReturnType {
                 span: ret_span,
@@ -160,18 +163,12 @@ impl<'ctx> Ctx<'ctx> {
                 expected: sig.return_type,
             })?
         }
-        body.set_terminator(block, mir::Return(ip));
-
-        Ok(body)
+        self.body.set_terminator(block, mir::Return(ip));
+        Ok(())
     }
 
     /// Returns a tuple (ip, span of returning expr).
-    fn add_stmts_ret(
-        &mut self,
-        body: &mut FnBody,
-        block: BP,
-        stmts: &[Expr],
-    ) -> Result<((BP, IP), Span), Diag> {
+    fn add_stmts_ret(&mut self, block: BP, stmts: &[Expr]) -> Result<((BP, IP), Span), Diag> {
         let mut block = block;
         for (i, stmt) in stmts.iter().enumerate() {
             match &stmt.body {
@@ -180,7 +177,7 @@ impl<'ctx> Ctx<'ctx> {
                     if i != stmts.len() - 1 {
                         return err(ME::MisplacedRet { span: stmt.span });
                     }
-                    let (block, ip) = self.add_expr(body, block, expr)?;
+                    let (block, ip) = self.add_expr(block, expr)?;
                     return Ok(((block, ip), expr.span));
                 }
                 Let(_, ident, expr) => {
@@ -191,29 +188,30 @@ impl<'ctx> Ctx<'ctx> {
                         }
                         .into_diag());
                     }
-                    let (block1, ip) = self.add_expr(body, block, expr)?;
+                    let (block1, ip) = self.add_expr(block, expr)?;
                     block = block1;
                     self.symbol_table.set_symbol(ident.name.to_string(), ip);
                 }
                 _ => {
-                    let (block1, _ip) = self.add_expr(body, block, stmt)?;
+                    let (block1, _ip) = self.add_expr(block, stmt)?;
                     block = block1;
                 }
             }
         }
-        let ip = body.push_unit_new_ip(block, DUMMY_SPAN);
+        let ip = self.body.push_unit_new_ip(block, DUMMY_SPAN);
         Ok(((block, ip), DUMMY_SPAN))
     }
 
     /// Returns (BP, IP).
     /// The BP tells you where control flow is at, after executing this expr.
     /// The IP tells you where is the return value of this expr.
-    fn add_expr(&self, body: &mut FnBody, block: BP, ex: &Expr) -> Result<(BP, IP), Diag> {
+    fn add_expr(&mut self, block: BP, ex: &Expr) -> Result<(BP, IP), Diag> {
         Ok(match &ex.body {
-            Paren(arg) => return self.add_expr(body, block, arg),
+            Paren(arg) => return self.add_expr(block, arg),
             Literal(lit) => (
                 block,
-                body.push_assign_new_ip(block, mir::Literal(*lit), ex.span),
+                self.body
+                    .push_assign_new_ip(block, mir::Literal(*lit), ex.span),
             ),
             IdentExpr(x) => {
                 let Some(ip) = self.symbol_table.get_symbol(x) else {
@@ -225,13 +223,13 @@ impl<'ctx> Ctx<'ctx> {
                 (block, ip)
             }
             Unary(op, arg_node) => {
-                let (block, arg) = self.add_expr(body, block, arg_node)?;
-                (block, body.add_unary(block, *op, arg)?)
+                let (block, arg) = self.add_expr(block, arg_node)?;
+                (block, self.body.add_unary(block, *op, arg)?)
             }
             Binary(op, left_node, right_node) => {
-                let (block, left) = self.add_expr(body, block, left_node)?;
-                let (block, right) = self.add_expr(body, block, right_node)?;
-                (block, body.add_binary(block, *op, left, right)?)
+                let (block, left) = self.add_expr(block, left_node)?;
+                let (block, right) = self.add_expr(block, right_node)?;
+                (block, self.body.add_binary(block, *op, left, right)?)
             }
             FnDefinition(fn_def) => err(ME::FnInExpr {
                 span: fn_def.fn_name.span,
@@ -240,7 +238,7 @@ impl<'ctx> Ctx<'ctx> {
             Let(span, ..) => return err(ME::MisplacedLet { span: *span }),
             Block(stmts) => {
                 let mut child_ctx = self.child();
-                let ((block, ip), _sp) = child_ctx.add_stmts_ret(body, block, stmts)?;
+                let ((block, ip), _sp) = child_ctx.add_stmts_ret(block, stmts)?;
                 (block, ip)
             }
             FnCall(fun, arg_nodes) => {
@@ -266,9 +264,9 @@ impl<'ctx> Ctx<'ctx> {
                 let mut args = vec![];
                 let mut block = block;
                 for (arg_node, param) in zip(arg_nodes, &sig.param_types) {
-                    let (block1, ip) = self.add_expr(body, block, arg_node)?;
+                    let (block1, ip) = self.add_expr(block, arg_node)?;
                     block = block1;
-                    let arg_type = body.get_type(ip);
+                    let arg_type = self.body.get_type(ip);
                     if arg_type != param.param_type {
                         err(ME::WrongArgType {
                             span: ex.span,
@@ -279,7 +277,7 @@ impl<'ctx> Ctx<'ctx> {
                     }
                     args.push(ip);
                 }
-                let ip = body.push_assign_new_ip(
+                let ip = self.body.push_assign_new_ip(
                     block,
                     mir::FnCall(fn_name.to_string(), args, sig.return_type),
                     ex.span,
@@ -287,9 +285,9 @@ impl<'ctx> Ctx<'ctx> {
                 (block, ip)
             }
             If(cond_node, if_node, else_node) => {
-                let (block, cond_ip) = self.add_expr(body, block, cond_node)?;
+                let (block, cond_ip) = self.add_expr(block, cond_node)?;
                 {
-                    let cond_type = body.get_type(cond_ip);
+                    let cond_type = self.body.get_type(cond_ip);
                     if cond_type != Bool {
                         err(ME::WrongIfConditionType {
                             span: cond_node.span,
@@ -298,9 +296,9 @@ impl<'ctx> Ctx<'ctx> {
                     }
                 }
                 // Setup diamond shape
-                let if_block = body.new_basic_block();
-                let else_block = body.new_basic_block();
-                body.set_terminator(
+                let if_block = self.body.new_basic_block();
+                let else_block = self.body.new_basic_block();
+                self.body.set_terminator(
                     block,
                     mir::If {
                         cond: cond_ip,
@@ -309,15 +307,15 @@ impl<'ctx> Ctx<'ctx> {
                     },
                 );
                 // Add branches
-                let (if_block, if_ip) = self.add_expr(body, if_block, if_node)?;
+                let (if_block, if_ip) = self.add_expr(if_block, if_node)?;
                 let (else_block, else_ip) = match else_node {
-                    Some(else_node) => self.add_expr(body, else_block, else_node)?,
-                    None => (else_block, body.push_unit_new_ip(block, DUMMY_SPAN)),
+                    Some(else_node) => self.add_expr(else_block, else_node)?,
+                    None => (else_block, self.body.push_unit_new_ip(block, DUMMY_SPAN)),
                 };
-                let out_block = body.new_basic_block();
+                let out_block = self.body.new_basic_block();
                 let value_type = {
-                    let if_type = body.get_type(if_ip);
-                    let else_type = body.get_type(else_ip);
+                    let if_type = self.body.get_type(if_ip);
+                    let else_type = self.body.get_type(else_ip);
                     if if_type != else_type {
                         match else_node {
                             Some(else_node) => err(ME::WrongElseType {
@@ -334,17 +332,19 @@ impl<'ctx> Ctx<'ctx> {
                     if_type
                 };
                 // Reconstruct value back to output branch
-                let out_val = body.push_local(value_type);
-                body.push(
+                let out_val = self.body.push_local(value_type);
+                self.body.push(
                     if_block,
                     mir::Assign(out_val, mir::Use(if_ip, value_type), if_node.span),
                 );
-                body.push(
+                self.body.push(
                     else_block,
                     mir::Assign(out_val, mir::Use(else_ip, value_type), if_node.span),
                 );
-                body.set_terminator(if_block, mir::Goto { target: out_block });
-                body.set_terminator(else_block, mir::Goto { target: out_block });
+                self.body
+                    .set_terminator(if_block, mir::Goto { target: out_block });
+                self.body
+                    .set_terminator(else_block, mir::Goto { target: out_block });
                 (out_block, out_val)
             }
         })

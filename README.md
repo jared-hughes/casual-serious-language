@@ -10,7 +10,6 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 - Allow typing `()` as return type of functions.
 - Allow type hints on variables.
-- Put `body` in `ctx`.
 - Compile `a && b` to `if (a) b else false` to get correct short-circuiting.
   - Note `&&` and `||` is not currently implemented for this reason.
 - Add mutable variables, making if-without-else useful.
