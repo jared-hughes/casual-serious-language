@@ -7,8 +7,10 @@ pub use Lit::*;
 pub enum Lit {
     /// e.g. `1`, `1e3`
     Integer(i64),
-    // e.g. `1.`, `1.0`, `1.0e3`
+    /// e.g. `1.`, `1.0`, `1.0e3`
     Float(f64),
+    /// `()`
+    Unit,
 }
 
 pub use BinOpToken::*;

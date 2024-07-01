@@ -107,22 +107,6 @@ msg: self => format!(
         applied to the final statement in a block."
     );
 
-pub struct FnMissingRet {
-    pub span: Span
-}
-msg: self => format!(
-        "Unit type '()' has not yet been implemented, so \
-        all functions must have a return. Try adding 'ret'."
-    );
-
-pub struct BlockMissingRet {
-    pub span: Span
-}
-msg: self => format!(
-        "Unit type '()' has not yet been implemented, so \
-        all blocks must have a return. Try adding 'ret'."
-    );
-
 pub struct TooManyArgs {
     pub span: Span,
     pub acw: ArgCountWrong
@@ -192,6 +176,17 @@ msg: self => format!(
         "Expected else branch to return type '{0}' (the same type as the 'if' branch), \
         but the else branch returned type '{1}'.",
         self.if_type, self.else_type
+    );
+
+
+pub struct WrongTypeMissingElse {
+    pub span: Span,
+    pub if_type: Type,
+}
+msg: self => format!(
+        "Expected else branch to return type '{0}' (the same type as this 'if' branch), \
+        but there is no else branch. Try removing 'ret' from the 'if' branch, or adding an 'else' branch.",
+        self.if_type
     );
 
 pub struct WrongIfConditionType {

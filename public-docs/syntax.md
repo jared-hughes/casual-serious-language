@@ -48,6 +48,15 @@ fn sum_square(x: f64, y: f64) -> f64 {
 }
 ```
 
+## If-else
+
+```rs
+fn max(x: i64, y: i64) -> i64 {
+  ret if (x > y) x
+      else y
+}
+```
+
 ## Nested blocks
 
 Curly braces `{ }` introduce blocks, which are expressions. The return value of a block is provided by the last statement, which must start with `ret`. The `ret` keyword provides the return value of the block.

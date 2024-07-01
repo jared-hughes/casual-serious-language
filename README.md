@@ -8,12 +8,16 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 ## Next Steps
 
-- `()` type to allow `if` without `else`.
+- Audit `.iter()` vs `.into_iter()`
+  - Clippy.
+- Allow typing `()` as return type of functions.
+- Allow type hints on variables.
+- Put `body` in `ctx`.
 - Compile `a && b` to `if (a) b else false` to get correct short-circuiting.
   - Note `&&` and `||` is not currently implemented for this reason.
+- Add mutable variables, making if-without-else useful.
 - Deflatten `KwIf` etc to `Kw(If)`.
 - Literals `true` and `false`.
-- Audit `.iter()` vs `.into_iter()`
 - `return` keyword as described in syntax.md.
 - `never` type to properly type "return"
 - Codemirror in the web preview, to underline errors.

@@ -9,6 +9,8 @@ pub enum Type {
     F64,
     /// A boolean value
     Bool,
+    /// `()` from Rust
+    Unit,
 }
 
 impl fmt::Display for Type {
@@ -17,6 +19,7 @@ impl fmt::Display for Type {
             I64 => "i64",
             F64 => "f64",
             Bool => "bool",
+            Unit => "()",
         };
         write!(f, "{}", s)
     }

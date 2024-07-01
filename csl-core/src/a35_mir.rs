@@ -111,6 +111,10 @@ impl FnBody {
         return ip;
     }
 
+    pub fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {
+        self.push_assign_new_ip(block, Literal(crate::ast::Lit::Unit), span)
+    }
+
     /// Create a new IP (local var)
     pub fn push_local(&mut self, value_type: Type) -> IP {
         let ind = self.types.len();
@@ -146,6 +150,7 @@ impl FnBody {
             Use(_, value_type) => value_type,
             Literal(Integer(_)) => Type::I64,
             Literal(Float(_)) => Type::F64,
+            Literal(Unit) => Type::Unit,
             Unary(op, ..) => op.get_intrinsic().return_type,
             Binary(op, ..) => op.get_intrinsic().return_type,
             FnCall(_, _, value_type) => value_type,

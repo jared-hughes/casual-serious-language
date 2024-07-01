@@ -6,7 +6,7 @@ use crate::build_mir_err::{self as ME, ArgCountWrong};
 use crate::errors::{Diag, Diagnostic};
 use crate::intrinsics::{OP1, OP2};
 use crate::mir::{self, FnBody, BP, IP};
-use crate::span::Span;
+use crate::span::{Span, DUMMY_SPAN};
 use crate::symbol_table::SymbolTable;
 use crate::types::*;
 
@@ -152,12 +152,6 @@ impl<'ctx> Ctx<'ctx> {
             ctx.symbol_table.set_symbol(name, ip);
         }
 
-        if fn_def.body.len() == 0 {
-            err(ME::FnMissingRet {
-                span: fn_def.fn_name.span,
-            })?;
-        }
-
         let ((block, ip), ret_span) = ctx.add_stmts_ret(&mut body, block, &fn_def.body)?;
         let return_type = body.get_type(ip);
         if return_type != sig.return_type {
@@ -173,8 +167,6 @@ impl<'ctx> Ctx<'ctx> {
         Ok(body)
     }
 
-    /// Precondition: stmts is nonempty.
-    /// Caller should give an appropriate error message when `stmts.len() == 0`.
     /// Returns a tuple (ip, span of returning expr).
     fn add_stmts_ret(
         &mut self,
@@ -182,20 +174,17 @@ impl<'ctx> Ctx<'ctx> {
         block: BP,
         stmts: &Vec<Expr>,
     ) -> Result<((BP, IP), Span), Diag> {
-        assert!(stmts.len() > 0);
         let mut block = block;
         for (i, stmt) in (&stmts).into_iter().enumerate() {
-            if i == stmts.len() - 1 {
-                if let Ret(_, expr) = &stmt.body {
-                    let (block, ip) = self.add_expr(body, block, &expr)?;
-                    return Ok(((block, ip), expr.span));
-                } else {
-                    return err(ME::FnMissingRet { span: stmt.span });
-                }
-            }
             match &stmt.body {
                 // TODO: Move Let and Ret special cases out of here, and make it return "never";
-                Ret(..) => return err(ME::MisplacedRet { span: stmt.span }),
+                Ret(_, expr) => {
+                    if i != stmts.len() - 1 {
+                        return err(ME::MisplacedRet { span: stmt.span });
+                    }
+                    let (block, ip) = self.add_expr(body, block, &expr)?;
+                    return Ok(((block, ip), expr.span));
+                }
                 Let(_, ident, expr) => {
                     if let Some(..) = self.symbol_table.get_symbol(&ident.name) {
                         return Err(ME::DuplicateDefinition {
@@ -209,11 +198,13 @@ impl<'ctx> Ctx<'ctx> {
                     self.symbol_table.set_symbol(ident.name.to_string(), ip);
                 }
                 _ => {
-                    todo!("Add dead code to MIR to get type checking.")
+                    let (block1, _ip) = self.add_expr(body, block, stmt)?;
+                    block = block1;
                 }
             }
         }
-        unreachable!();
+        let ip = body.push_unit_new_ip(block, DUMMY_SPAN);
+        return Ok(((block, ip), DUMMY_SPAN));
     }
 
     /// Returns (BP, IP).
@@ -251,9 +242,6 @@ impl<'ctx> Ctx<'ctx> {
             Let(span, ..) => return err(ME::MisplacedLet { span: *span }),
             Block(stmts) => {
                 let mut child_ctx = self.child();
-                if stmts.len() == 0 {
-                    err(ME::BlockMissingRet { span: ex.span })?;
-                }
                 let ((block, ip), _sp) = child_ctx.add_stmts_ret(body, block, stmts)?;
                 (block, ip)
             }
@@ -324,20 +312,26 @@ impl<'ctx> Ctx<'ctx> {
                 );
                 // Add branches
                 let (if_block, if_ip) = self.add_expr(body, if_block, &if_node)?;
-                let Some(else_node) = else_node else {
-                    todo!();
+                let (else_block, else_ip) = match else_node {
+                    Some(else_node) => self.add_expr(body, else_block, &else_node)?,
+                    None => (else_block, body.push_unit_new_ip(block, DUMMY_SPAN)),
                 };
-                let (else_block, else_ip) = self.add_expr(body, else_block, &else_node)?;
                 let out_block = body.new_basic_block();
                 let value_type = {
                     let if_type = body.get_type(if_ip);
                     let else_type = body.get_type(else_ip);
                     if if_type != else_type {
-                        err(ME::WrongElseType {
-                            span: else_node.span,
-                            if_type,
-                            else_type,
-                        })?;
+                        match else_node {
+                            Some(else_node) => err(ME::WrongElseType {
+                                span: else_node.span,
+                                if_type,
+                                else_type,
+                            })?,
+                            None => err(ME::WrongTypeMissingElse {
+                                span: if_node.span,
+                                if_type,
+                            })?,
+                        }
                     }
                     if_type
                 };
@@ -659,7 +653,7 @@ mod build_mir_expr_block {
     fn empty_block() {
         check_build_mir(
             "1 + { }",
-            expect!["At 25-27: Unit type '()' has not yet been implemented, so all blocks must have a return. Try adding 'ret'."],
+            expect!["At 23: Type error: Cannot perform i64 + ()"],
         );
     }
 
@@ -737,14 +731,11 @@ mod build_mir_expr_hard {
             "if(2) 3 else 4.0",
             expect!["At 24: Expected 'if' to branch on a boolean ('Bool') but got type 'i64'."],
         );
-        // TODO-unit-type: Handle no else branch
-        // check_build_mir(
-        //     "i64",
-        //     "if(2>1) 3",
-        //     expect![[r#"
-        //         TODO
-        //     "#]],
-        // );
+        check_build_mir(
+            "i64",
+            "if(2>1) 3",
+            expect!["At 29: Expected else branch to return type 'i64' (the same type as this 'if' branch), but there is no else branch. Try removing 'ret' from the 'if' branch, or adding an 'else' branch."],
+        );
     }
 }
 
@@ -907,7 +898,9 @@ mod build_mir_functions {
         );
         check_build_mir(
             "fn f() -> i64 { 1+2; }",
-            expect!["At 17-19: Unit type '()' has not yet been implemented, so all functions must have a return. Try adding 'ret'."],
+            expect![
+                "At (!1,1!): Expected function 'f' to return type 'i64', but it returned type '()'"
+            ],
         );
         check_build_mir(
             "fn f() -> i64 { ret 3; 1+2; }",
@@ -915,7 +908,9 @@ mod build_mir_functions {
         );
         check_build_mir(
             "fn f() -> i64 { }",
-            expect!["At 4: Unit type '()' has not yet been implemented, so all functions must have a return. Try adding 'ret'."],
+            expect![
+                "At (!1,1!): Expected function 'f' to return type 'i64', but it returned type '()'"
+            ],
         );
         check_build_mir(
             "fn f() -> i64 {\
@@ -986,6 +981,32 @@ mod build_mir_functions {
                   IP(3) = Binary(MulF64, IP(2), IP(2))
                   Return(IP(3))
             "#]],
+        );
+    }
+
+    #[test]
+    fn dead_code() {
+        check_build_mir(
+            "fn f() -> i64 { 1+2; ret 3+4; }",
+            expect![[r#"
+                fn f:
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(AddI64, IP(0), IP(1))
+                  IP(3) = Literal(Integer(3))
+                  IP(4) = Literal(Integer(4))
+                  IP(5) = Binary(AddI64, IP(3), IP(4))
+                  Return(IP(5))
+            "#]],
+        );
+        check_build_mir(
+            "fn f() -> i64 { 1+2.0; ret 3+4; }",
+            expect!["At 18: Type error: Cannot perform i64 + f64"],
+        );
+        check_build_mir(
+            "fn f() -> i64 { ret 3+4; 1+2; }",
+            expect!["At 17-23: Misplaced 'ret'. The keyword 'ret' can only be applied to the final statement in a block."],
         );
     }
 

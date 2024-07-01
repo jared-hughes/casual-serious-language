@@ -79,6 +79,7 @@ impl<'prog> Interpreter<'prog> {
         Ok(match *rval {
             Literal(Integer(x)) => I64(x),
             Literal(Float(x)) => F64(x),
+            Literal(Unit) => UnitValue,
             Unary(op, a_ip) => {
                 let a = mem[a_ip];
                 let info = op.get_intrinsic();
