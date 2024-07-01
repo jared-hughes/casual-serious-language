@@ -6,6 +6,7 @@ use crate::build_mir_err::{self as ME, ArgCountWrong};
 use crate::errors::{Diag, Diagnostic};
 use crate::intrinsics::{OP1, OP2};
 use crate::mir::{self, BasicBlock, IP};
+use crate::span::Span;
 use crate::symbol_table::SymbolTable;
 use crate::types::*;
 
@@ -156,48 +157,57 @@ impl<'ctx> Ctx<'ctx> {
             })?;
         }
 
-        for (i, stmt) in (&fn_def.body).into_iter().enumerate() {
-            if i == fn_def.body.len() - 1 {
-                if let Ret(..) = stmt.body {
+        let (ip, ret_span) = ctx.extend_bb_with_stmts_ret(&mut block, &fn_def.body)?;
+        let return_type = block.get_type(ip);
+        if return_type != sig.return_type {
+            err(ME::WrongReturnType {
+                span: ret_span,
+                fn_name: fn_def.fn_name.name.to_string(),
+                actual: return_type,
+                expected: sig.return_type,
+            })?
+        }
+
+        Ok(block)
+    }
+
+    /// Precondition: stmts is nonempty.
+    /// Caller should give an appropriate error message when `stmts.len() == 0`.
+    /// Returns a tuple (ip, span of returning expr).
+    fn extend_bb_with_stmts_ret(
+        &mut self,
+        block: &mut BasicBlock,
+        stmts: &Vec<Expr>,
+    ) -> Result<(IP, Span), Diag> {
+        for (i, stmt) in (&stmts).into_iter().enumerate() {
+            if i == stmts.len() - 1 {
+                if let Ret(_, expr) = &stmt.body {
+                    let ip = self.add_expr(block, &expr)?;
+                    block.set_return(ip);
+                    return Ok((ip, expr.span));
                 } else {
                     return err(ME::MissingRet { span: stmt.span });
                 }
             }
             match &stmt.body {
-                Ret(_, expr) => {
-                    if i != fn_def.body.len() - 1 {
-                        return err(ME::MisplacedRet { span: stmt.span });
-                    }
-                    let ip = ctx.add_expr(&mut block, &expr)?;
-                    block.set_return(ip);
-                    let return_type = block.get_type(ip);
-                    if return_type != sig.return_type {
-                        err(ME::WrongReturnType {
-                            span: expr.span,
-                            fn_name: fn_def.fn_name.name.to_string(),
-                            actual: return_type,
-                            expected: sig.return_type,
-                        })?
-                    }
-                }
+                Ret(..) => return err(ME::MisplacedRet { span: stmt.span }),
                 Let(_, ident, expr) => {
-                    if let Some(..) = ctx.symbol_table.get_symbol(&ident.name) {
+                    if let Some(..) = self.symbol_table.get_symbol(&ident.name) {
                         return Err(ME::DuplicateDefinition {
                             span: ident.span,
                             name: ident.name.to_string(),
                         }
                         .into_diag());
                     }
-                    let ip = ctx.add_expr(&mut block, &expr)?;
-                    ctx.symbol_table.set_symbol(ident.name.to_string(), ip)
+                    let ip = self.add_expr(block, &expr)?;
+                    self.symbol_table.set_symbol(ident.name.to_string(), ip);
                 }
                 _ => {
                     // Dead code
                 }
             }
         }
-
-        Ok(block)
+        unreachable!();
     }
 
     fn add_expr(&self, block: &mut BasicBlock, ex: &Expr) -> Result<IP, Diag> {
@@ -227,6 +237,11 @@ impl<'ctx> Ctx<'ctx> {
             })?,
             Ret(span, _) => return err(ME::MisplacedRet { span: *span }),
             Let(span, ..) => return err(ME::MisplacedLet { span: *span }),
+            Block(stmts) => {
+                let mut child_ctx = self.child();
+                let (ip, ..) = child_ctx.extend_bb_with_stmts_ret(block, stmts)?;
+                ip
+            }
             FnCall(fun, arg_nodes) => {
                 let IdentExpr(fn_name) = &fun.body else {
                     err(ME::CallNotIdent { span: ex.span })?
@@ -348,61 +363,20 @@ mod build_mir_expr_block {
     }
 
     fn check_build_mir(input: &str, expect: Expect) {
-        let program = if !input.contains("{") {
-            let ty = match () {
-                () if input.contains("<") => "bool",
-                () if input.contains(">") => "bool",
-                () if input.contains("=") => "bool",
-                () if input.contains(".") => "f64",
-                () => "i64",
-            };
-            format!("fn f() -> {ty} {{ ret {input}; }}")
-        } else {
-            input.to_owned()
+        let ty = match () {
+            () if input.contains("<") => "bool",
+            () if input.contains(">") => "bool",
+            () if input.contains("==") => "bool",
+            () if input.contains("!=") => "bool",
+            () if input.contains(".") => "f64",
+            () => "i64",
         };
+        let program = format!("fn f() -> {ty} {{ ret {input}; }}");
         let actual = match mir_from_string(&program) {
             Ok(mir) => format!("{:#?}", mir),
             Err(err) => format!("{:#?}", err),
         };
         expect.assert_eq(&actual)
-    }
-
-    #[test]
-    fn smoke_test() {
-        check_build_mir(
-            "fn f() -> i64 { ret 12*3+8/4; }",
-            expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(12))
-                   1: i64 Literal(Integer(3))
-                   2: i64 Binary(MulI64, IP(0), IP(1))
-                   3: i64 Literal(Integer(8))
-                   4: i64 Literal(Integer(4))
-                   5: i64 Binary(DivI64, IP(3), IP(4))
-                   6: i64 Binary(AddI64, IP(2), IP(5))"#]],
-        );
-    }
-
-    #[test]
-    fn param() {
-        check_build_mir(
-            "fn f(x: i64) -> i64 { ret x + 1; } ",
-            expect![[r#"
-                BasicBlock
-                   0: i64 LoadArg(I64)
-                   1: i64 Literal(Integer(1))
-                   2: i64 Binary(AddI64, IP(0), IP(1))"#]],
-        );
-    }
-
-    #[test]
-    fn incorrect_return_type() {
-        check_build_mir(
-            "fn f() -> i64 { ret 1.0 + 2.0; }",
-            expect![
-                "At 21-29: Expected function 'f' to return type 'i64', but it returned type 'f64'"
-            ],
-        );
     }
 
     #[test]
@@ -551,6 +525,43 @@ mod build_mir_expr_block {
             expect!["At 30: Type error: Cannot perform bool < i64"],
         );
     }
+
+    #[test]
+    fn block() {
+        check_build_mir(
+            "1 + { ret 2+3; } + 4",
+            expect![[r#"
+                BasicBlock
+                   0: i64 Literal(Integer(1))
+                   1: i64 Literal(Integer(2))
+                   2: i64 Literal(Integer(3))
+                   3: i64 Binary(AddI64, IP(1), IP(2))
+                   4: i64 Binary(AddI64, IP(0), IP(3))
+                   5: i64 Literal(Integer(4))
+                   6: i64 Binary(AddI64, IP(4), IP(5))"#]],
+        );
+
+        check_build_mir(
+            "{ let x=1; ret x*2; } + {let x=3; ret x*4;}",
+            expect![[r#"
+                BasicBlock
+                   0: i64 Literal(Integer(1))
+                   1: i64 Literal(Integer(2))
+                   2: i64 Binary(MulI64, IP(0), IP(1))
+                   3: i64 Literal(Integer(3))
+                   4: i64 Literal(Integer(4))
+                   5: i64 Binary(MulI64, IP(3), IP(4))
+                   6: i64 Binary(AddI64, IP(2), IP(5))"#]],
+        );
+    }
+
+    #[test]
+    fn shadowing_errors() {
+        check_build_mir(
+            "{ let x=1; ret {let x=3; ret x*4;};}",
+            expect!["At 41: Cannot redefine 'x' since it is already defined."],
+        );
+    }
 }
 
 #[cfg(test)]
@@ -570,6 +581,28 @@ mod build_mir_functions {
             Err(err) => format!("{:#?}", err),
         };
         expect.assert_eq(&actual)
+    }
+
+    #[test]
+    fn param() {
+        check_build_mir(
+            "fn f(x: i64) -> i64 { ret x + 1; } ",
+            expect![[r#"
+                fn f BasicBlock
+                   0: i64 LoadArg(I64)
+                   1: i64 Literal(Integer(1))
+                   2: i64 Binary(AddI64, IP(0), IP(1))"#]],
+        );
+    }
+
+    #[test]
+    fn incorrect_return_type() {
+        check_build_mir(
+            "fn f() -> i64 { ret 1.0 + 2.0; }",
+            expect![
+                "At 21-29: Expected function 'f' to return type 'i64', but it returned type 'f64'"
+            ],
+        );
     }
 
     #[test]
@@ -756,18 +789,25 @@ mod build_mir_functions {
     fn fn_let_collisions() {
         check_build_mir(
             "fn f(x: f64, y: f64) -> f64 {\
-                let x = y;
-                ret x;
+                let x = y;\
+                ret x;\
             }",
             expect!["At 34: Cannot redefine 'x' since it is already defined."],
         );
         check_build_mir(
             "fn f(x: f64) -> f64 {\
-                let z = x;
-                let z = x;
+                let z = x;\
+                let z = x;\
+                ret z;\
+            }",
+            expect!["At 36: Cannot redefine 'z' since it is already defined."],
+        );
+        check_build_mir(
+            "fn f(x: f64) -> f64 {\
+                let z = {let x = 5; ret x+1;};\
                 ret z;
             }",
-            expect!["At 53: Cannot redefine 'z' since it is already defined."],
+            expect!["At 35: Cannot redefine 'x' since it is already defined."],
         );
     }
 }

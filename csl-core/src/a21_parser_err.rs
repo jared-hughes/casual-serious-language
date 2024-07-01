@@ -118,6 +118,14 @@ msg: self => format!(
     self.fn_name
 );
 
+pub struct BlockExpCloseCurly {
+    pub open_curly: Span,
+}
+msg: self => format!(
+    "Expected '}}' to end the body of block started at '{0:?}'",
+    self.open_curly
+);
+
 pub struct LetExpEquals {
     pub ident: Ident,
 }

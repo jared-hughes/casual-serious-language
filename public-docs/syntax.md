@@ -48,6 +48,26 @@ fn sum_square(x: f64, y: f64) -> f64 {
 }
 ```
 
+## Nested blocks
+
+Curly braces `{ }` introduce blocks, which are expressions. The return value of a block is provided by the last statement, which must start with `ret`. The `ret` keyword provides the return value of the block.
+
+The keyword `ret` is only allowed as the last statement of a block, and it corresponds to (in Rust) leaving off the semicolon.
+
+```rs
+fn funny_polynomial(x: f64) -> f64 {
+  let y = {
+    let a = x * x;
+    ret a * a + a + 1.0;
+  };
+  let z = {
+    let a = x - 1;
+    ret a * a - a - 1.0;
+  };
+  ret y + z;
+}
+```
+
 ## Optional Semicolons (not yet implemented)
 
 Currently, semicolons are required after each statement (besides functions, which end in a curly brace `}`).
@@ -58,14 +78,11 @@ The plan is to eventually make semicolons optional everywhere (but suggested -- 
   - I don't like this though. It's so nice to just write `[1,2,3]`.
 - We want to avoid introducing syntax that allows e.g. `-x < 3 || print(x)`, since that would get confused as a subtraction with the previous line.
 
-## Blocks (not yet implemented)
+## `return` keyword (not yet implemented)
 
-Two return keywords:
+The keyword `ret` determines the value of the block without affecting control flow.
 
-- `return` exits the function and returns the value
-- `ret` determines the value of the block without affecting control flow.
-  - If `ret` is the last statement of the block, it corresponds to (in Rust) leaving off the semicolon.
-  - `ret` is only allowed as the last statement of the block for now.
+A future `return` keyword would affect control flow: it would jump to the end of the containing function and return teh value.
 
 For example,
 
@@ -83,6 +100,11 @@ fn something(x: i64) {
     3 => {
       let y = x * x;
       ret (y + 2) * y + 1;
+    },
+    // Block introduced, but "return" returns to the end of the function.
+    _ => {
+      let y = x - 1;
+      return y * y;
     }
   }
   // 'ret' would also work here.

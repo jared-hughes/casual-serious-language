@@ -132,6 +132,8 @@ pub enum ExprInner {
     IdentExpr(String),
     /// Function definition
     FnDefinition(FunctionDefinition),
+    /// Block `y = { ret x + 1; }`
+    Block(Vec<Expr>),
     /// Return with unchanged control flow, `ret x;`
     Ret(Span, Box<Expr>),
     /// Parenthesized expression `(x)`.
@@ -177,6 +179,10 @@ impl fmt::Debug for ExprInner {
                 }
                 write!(f, ") ")?;
                 f.debug_set().entries(&def.body).finish()
+            }
+            Block(exprs) => {
+                write!(f, "Block")?;
+                f.debug_set().entries(exprs).finish()
             }
             Ret(span, arg) => {
                 write!(f, "ret({:?}) ", span)?;

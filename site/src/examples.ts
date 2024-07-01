@@ -36,6 +36,23 @@ const _examples: Example[] = [
       ret sum_square(3.0, 4.0);
     }`,
   },
+  {
+    name: "nested block",
+    source: `fn funny_polynomial(x: f64) -> f64 {
+      let y = {
+        let a = x * x;
+        ret a * a + a + 1.0;
+      };
+      let z = {
+        let a = x - 1.0;
+        ret a * a - a - 1.0;
+      };
+      ret y + z;
+    }
+    fn main() -> f64 {
+      ret funny_polynomial(2.0);
+    }`,
+  },
 ];
 
 export const examples: Example[] = _examples.map((ex) => ({

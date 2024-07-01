@@ -8,7 +8,6 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 ## Next Steps
 
-- Blocks, so you can write `{ let a = 1; ret a * a + a } + 5`
 - Branching
 - Literals `true` and `false`.
 - Compiling `a && b` to `if (a) b else false` to get correct short-circuiting.
@@ -71,5 +70,5 @@ To build for web,
 Then serve the files in public-deploy. I like doing
 
 ```sh
-./scripts/build-site.sh && npx http-server public-deploy/
+./scripts/build-site.sh && npx http-server public-deploy/ -c-1
 ```

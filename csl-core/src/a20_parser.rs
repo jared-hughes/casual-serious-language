@@ -212,6 +212,7 @@ impl<'a> Parser<'a> {
                 Ok(expr(ast::Unary(unop, inner), s))
             }
             KwFn => self.parse_fn(start),
+            OpenDelim(CurlyBrace) => self.parse_block(start),
             KwLet => self.parse_let(start),
             Bang => {
                 let inner = self.parse_main(BindingPower::Prefix)?;
@@ -222,13 +223,9 @@ impl<'a> Parser<'a> {
             BinOp(_) => err(PE::UnexpectedBinaryInitial.span(start.span)),
             CloseDelim(Parenthesis) => err(PE::UnmatchedCloseParen.span(start.span)),
             Eof => err(PE::UnexpectedEOF.span(start.span)),
-            OpenDelim(CurlyBrace)
-            | CloseDelim(CurlyBrace)
-            | Colon
-            | Comma
-            | ThinArrow
-            | Semi
-            | Equals => err(PE::GeneralUnexpected.span(start.span)),
+            CloseDelim(CurlyBrace) | Colon | Comma | ThinArrow | Semi | Equals => {
+                err(PE::GeneralUnexpected.span(start.span))
+            }
             Whitespace | Invalid(_) => panic!("Whitespace should be skipped"),
         }
     }
@@ -303,6 +300,19 @@ impl<'a> Parser<'a> {
         let close_paren = consume_token!(self, CloseDelim(Parenthesis), PE::CallExpCloseParen);
         let s = span(left.span.lo, close_paren.span.hi);
         return Ok(expr(ast::FnCall(left, args), s));
+    }
+
+    fn parse_block(&mut self, start_curly: Token) -> ExprResult {
+        let body = self.parse_stmts()?;
+        let close_curly = consume_token!(
+            self,
+            CloseDelim(CurlyBrace),
+            PE::BlockExpCloseCurly {
+                open_curly: start_curly.span
+            }
+        );
+        let s = span(start_curly.span.lo, close_curly.span.hi);
+        return Ok(expr(ast::Block(body), s));
     }
 
     fn parse_fn(&mut self, fn_token: Token) -> ExprResult {
@@ -1014,6 +1024,61 @@ mod parser_expr_tests {
             expect!["At (!8,8!): Hold your horses. An EOF already?"],
         );
     }
+
+    #[test]
+    fn block_in_expr() {
+        check_parsing(
+            "let x = { ret 1 + 2; } + 6",
+            expect![[r#"
+                (1-26)Let(1-3)[x](
+                    (9-26)Binary[Add(24)](
+                        (9-22)Block{
+                            (11-19)ret(11-13) (
+                                (15-19)Binary[Add(17)](
+                                    (15)Literal(Integer(1)),
+                                    (19)Literal(Integer(2)),
+                                ),
+                            ),
+                        },
+                        (26)Literal(Integer(6)),
+                    ),
+                )"#]],
+        );
+        check_parsing(
+            "let x = -{ let y = 3; ret y + 2; }",
+            expect![[r#"
+                (1-34)Let(1-3)[x](
+                    (9-34)Unary[Neg(9)](
+                        (10-34)Block{
+                            (12-20)Let(12-14)[y](
+                                (20)Literal(Integer(3)),
+                            ),
+                            (23-31)ret(23-25) (
+                                (27-31)Binary[Add(29)](
+                                    (27)Ident("y"),
+                                    (31)Literal(Integer(2)),
+                                ),
+                            ),
+                        },
+                    ),
+                )"#]],
+        );
+        check_parsing(
+            "1+{ret 2;}+4",
+            expect![[r#"
+                (1-12)Binary[Add(11)](
+                    (1-10)Binary[Add(2)](
+                        (1)Literal(Integer(1)),
+                        (3-10)Block{
+                            (4-8)ret(4-6) (
+                                (8)Literal(Integer(2)),
+                            ),
+                        },
+                    ),
+                    (12)Literal(Integer(4)),
+                )"#]],
+        )
+    }
 }
 
 #[cfg(test)]
@@ -1224,6 +1289,23 @@ mod parser_stmt_tests {
         check_parsing(
             "fn f() -> i64 { ) }",
             expect!["At 17: Expected '}' to end the body of function 'f'. For example: `fn add(x: u64, y: u64) -> u64 { x + y }`"],
+        );
+    }
+
+    #[test]
+    fn top_level_block() {
+        check_parsing(
+            "{ret 1 + 2;};",
+            expect![[r#"
+                (1-12)Block{
+                    (2-10)ret(2-4) (
+                        (6-10)Binary[Add(8)](
+                            (6)Literal(Integer(1)),
+                            (10)Literal(Integer(2)),
+                        ),
+                    ),
+                }
+            "#]],
         );
     }
 }
