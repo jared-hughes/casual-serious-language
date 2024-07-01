@@ -108,14 +108,14 @@ impl fmt::Display for Ident {
 
 pub(crate) struct FunctionParam {
     pub(crate) name: Ident,
-    pub(crate) param_type: Ident,
+    pub(crate) param_type: Box<Expr>,
 }
 
 pub(crate) struct FunctionDefinition {
     pub(crate) fn_name: Ident,
     pub(crate) params: Vec<FunctionParam>,
     pub(crate) body: Vec<Expr>,
-    pub(crate) return_type: Ident,
+    pub(crate) return_type: Box<Expr>,
 }
 
 pub(crate) use ExprInner::*;
@@ -174,12 +174,12 @@ impl fmt::Debug for ExprInner {
             FnDefinition(def) => {
                 write!(f, "FnDefinition[{}](", def.fn_name)?;
                 for (i, p) in def.params.iter().enumerate() {
-                    write!(f, "{}: {}", p.name, p.param_type)?;
+                    write!(f, "{}: {:?}", p.name, p.param_type)?;
                     if i < def.params.len() - 1 {
                         write!(f, ", ")?;
                     }
                 }
-                write!(f, ") ")?;
+                write!(f, ") -> {:?} ", def.return_type)?;
                 f.debug_set().entries(&def.body).finish()
             }
             Block(exprs) => {

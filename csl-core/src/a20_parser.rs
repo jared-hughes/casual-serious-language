@@ -67,6 +67,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
+    /// Only fails for Invalid tokens
     fn next(&mut self) -> Result<Token<'a>, Diag> {
         let next = self
             .lexer
@@ -75,6 +76,7 @@ impl<'a> Parser<'a> {
         preprocess(next)
     }
 
+    /// Only fails for Invalid tokens
     fn peek(&mut self) -> Result<Token<'a>, Diag> {
         let peek = *self
             .lexer
@@ -189,6 +191,11 @@ impl<'a> Parser<'a> {
             Literal(x) => Ok(expr(ast::Literal(x), start.span)),
             Ident(s) => Ok(expr(ast::IdentExpr(s.to_owned()), start.span)),
             OpenDelim(Parenthesis) => {
+                if let CloseDelim(Parenthesis) = self.peek()?.kind {
+                    let close_paren = self.next()?;
+                    let s = span(start.span.lo, close_paren.span.hi);
+                    return Ok(expr(ast::Literal(ast::Lit::Unit), s));
+                }
                 let inner = self.parse_main(BindingPower::Top)?;
                 let close_paren = consume_token!(
                     self,
@@ -332,13 +339,13 @@ impl<'a> Parser<'a> {
             // :
             consume_token!(self, Colon, PE::FnExpColon { fn_name, param });
             // i64
-            let type_name = consume_ident!(self, PE::FnExpParamType { fn_name, param });
+            let type_name = self.parse_type()?;
             // , or )
             let after_param = self.peek()?;
             // Don't need comma ',' if next token is ')'
             if !terminates_fn_params(after_param.kind) {
                 // Trailing comma, or comma between args
-                consume_token!(self, Comma, PE::CallExpComma);
+                consume_token!(self, Comma, PE::ParamExpComma);
             }
             params.push(ast::FunctionParam {
                 name: param,
@@ -354,7 +361,7 @@ impl<'a> Parser<'a> {
         // ->
         consume_token!(self, ThinArrow, PE::FnExpThinArrow { fn_name });
         // i64
-        let return_type = consume_ident!(self, PE::FnExpReturnType { fn_name });
+        let return_type = self.parse_type()?;
         // {
         consume_token!(self, OpenDelim(CurlyBrace), PE::FnExpOpenCurly { fn_name });
         // ret x * 2;
@@ -374,6 +381,14 @@ impl<'a> Parser<'a> {
             }),
             span(fn_token.span.lo, close_curly.span.hi),
         ))
+    }
+
+    fn parse_type(&mut self) -> ExprResult {
+        let peeked = self.peek()?;
+        if !maybe_starts_type(peeked.kind) {
+            err(PE::ExpType.span(peeked.span))?;
+        }
+        self.parse_main(BindingPower::Top)
     }
 
     fn parse_let(&mut self, let_token: Token) -> ExprResult {
@@ -455,10 +470,26 @@ fn terminates_block(tok: TokenKind) -> bool {
 /// "Expected )" instead of "Expected ','" in an error message.
 fn terminates_fn_params(tok: TokenKind) -> bool {
     match tok {
-        Bang | BinOp(_) | OpenDelim(_) | CloseDelim(_) | Eof | ThinArrow | Invalid(_) | Semi => {
-            true
-        }
-        Comma | Literal(_) | Colon | Ident(_) | Kw(_) | Equals => false,
+        Bang
+        | BinOp(_)
+        | OpenDelim(CurlyBrace)
+        | CloseDelim(_)
+        | Eof
+        | ThinArrow
+        | Invalid(_)
+        | Semi => true,
+        OpenDelim(Parenthesis) | Comma | Literal(_) | Colon | Ident(_) | Kw(_) | Equals => false,
+        Whitespace => panic!("Whitespace should be skipped"),
+    }
+}
+
+/// This function must return `true` for the first token of any valid type name.
+/// The behavior otherwise is arbitrary. `true` would lead to a specific error later on,
+/// while `false` would say the type is missing (good for punctuation)
+fn maybe_starts_type(tok: TokenKind) -> bool {
+    match tok {
+        Ident(_) | Literal(_) | Kw(_) | Invalid(_) | Bang | BinOp(_) | OpenDelim(_) => true,
+        Comma | Colon | Equals | Semi | Eof | ThinArrow | CloseDelim(_) => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }
@@ -480,6 +511,7 @@ mod parser_expr_tests {
     fn atoms() {
         check_parsing("x", expect![[r#"(1)Ident("x")"#]]);
         check_parsing("1", expect!["(1)Literal(Integer(1))"]);
+        check_parsing("()", expect!["(1-2)Literal(Unit)"]);
     }
 
     #[test]
@@ -965,6 +997,13 @@ mod parser_expr_tests {
     fn fn_call() {
         check_parsing("f()", expect![[r#"(1-3)call((1)Ident("f"))"#]]);
         check_parsing(
+            "f(())",
+            expect![[r#"
+                (1-5)call((1)Ident("f"))(
+                    (3-4)Literal(Unit),
+                )"#]],
+        );
+        check_parsing(
             "f(x)",
             expect![[r#"
                 (1-4)call((1)Ident("f"))(
@@ -1221,12 +1260,12 @@ mod parser_stmt_tests {
                     (1)Literal(Integer(1)),
                     (3)Literal(Integer(2)),
                 )
-                (5-32)FnDefinition[three]() {
+                (5-32)FnDefinition[three]() -> (19-21)Ident("i64") {
                     (25-29)ret(25-27) (
                         (29)Literal(Integer(3)),
                     ),
                 }
-                (46-72)FnDefinition[four]() {
+                (46-72)FnDefinition[four]() -> (59-61)Ident("i64") {
                     (65-69)ret(65-67) (
                         (69)Literal(Integer(4)),
                     ),
@@ -1244,7 +1283,7 @@ mod parser_stmt_tests {
         check_parsing(
             "fn three() -> i64 { ret 3; }",
             expect![[r#"
-                (1-28)FnDefinition[three]() {
+                (1-28)FnDefinition[three]() -> (15-17)Ident("i64") {
                     (21-25)ret(21-23) (
                         (25)Literal(Integer(3)),
                     ),
@@ -1254,7 +1293,7 @@ mod parser_stmt_tests {
         check_parsing(
             "fn double(x: i64) -> i64 { ret 2*x; }",
             expect![[r#"
-                (1-37)FnDefinition[double](x: i64) {
+                (1-37)FnDefinition[double](x: (14-16)Ident("i64")) -> (22-24)Ident("i64") {
                     (28-34)ret(28-30) (
                         (32-34)Binary[Mul(33)](
                             (32)Literal(Integer(2)),
@@ -1267,11 +1306,48 @@ mod parser_stmt_tests {
         check_parsing(
             "fn add(x: i64, y: i64) -> i64 { ret x + y; }",
             expect![[r#"
-                (1-44)FnDefinition[add](x: i64, y: i64) {
+                (1-44)FnDefinition[add](x: (11-13)Ident("i64"), y: (19-21)Ident("i64")) -> (27-29)Ident("i64") {
                     (33-41)ret(33-35) (
                         (37-41)Binary[Add(39)](
                             (37)Ident("x"),
                             (41)Ident("y"),
+                        ),
+                    ),
+                }
+            "#]],
+        );
+        check_parsing(
+            "fn branch(x: bool) -> () { if (x) {} else (); }",
+            expect![[r#"
+                (1-47)FnDefinition[branch](x: (14-17)Ident("bool")) -> (23-24)Literal(Unit) {
+                    (28-44)If {
+                        cond: (32)Ident("x"),
+                        true: (35-36)Block{},
+                        false: Some(
+                            (43-44)Literal(Unit),
+                        ),
+                    },
+                }
+            "#]],
+        );
+        check_parsing(
+            "fn ignore(x: ()) -> () { ret (); }",
+            expect![[r#"
+                (1-34)FnDefinition[ignore](x: (14-15)Literal(Unit)) -> (21-22)Literal(Unit) {
+                    (26-31)ret(26-28) (
+                        (30-31)Literal(Unit),
+                    ),
+                }
+            "#]],
+        );
+        check_parsing(
+            "fn double(x: (i64)) -> (i64) { ret 2*x; }",
+            expect![[r#"
+                (1-41)FnDefinition[double](x: (14-18)paren@(15-17)Ident("i64")) -> (24-28)paren@(25-27)Ident("i64") {
+                    (32-38)ret(32-34) (
+                        (36-38)Binary[Mul(37)](
+                            (36)Literal(Integer(2)),
+                            (38)Ident("x"),
                         ),
                     ),
                 }
@@ -1284,7 +1360,7 @@ mod parser_stmt_tests {
         check_parsing(
             "fn double(x: i64,) -> i64 { ret 2*x; }",
             expect![[r#"
-                (1-38)FnDefinition[double](x: i64) {
+                (1-38)FnDefinition[double](x: (14-16)Ident("i64")) -> (23-25)Ident("i64") {
                     (29-35)ret(29-31) (
                         (33-35)Binary[Mul(34)](
                             (33)Literal(Integer(2)),
@@ -1297,7 +1373,7 @@ mod parser_stmt_tests {
         check_parsing(
             "fn add(x: i64, y: i64,) -> i64 { ret x + y; }",
             expect![[r#"
-                (1-45)FnDefinition[add](x: i64, y: i64) {
+                (1-45)FnDefinition[add](x: (11-13)Ident("i64"), y: (19-21)Ident("i64")) -> (28-30)Ident("i64") {
                     (34-42)ret(34-36) (
                         (38-42)Binary[Add(40)](
                             (38)Ident("x"),
@@ -1314,13 +1390,13 @@ mod parser_stmt_tests {
         check_parsing(
             "fn f() -> i64 { }",
             expect![[r#"
-                (1-17)FnDefinition[f]() {}
+                (1-17)FnDefinition[f]() -> (11-13)Ident("i64") {}
             "#]],
         );
         check_parsing(
             "fn f() -> i64 { let x = y; }",
             expect![[r#"
-                (1-28)FnDefinition[f]() {
+                (1-28)FnDefinition[f]() -> (11-13)Ident("i64") {
                     (17-25)Let(17-19)[x](
                         (25)Ident("y"),
                     ),
@@ -1330,7 +1406,7 @@ mod parser_stmt_tests {
         check_parsing(
             "fn f() -> i64 { f(f(f(f()))); }",
             expect![[r#"
-                (1-31)FnDefinition[f]() {
+                (1-31)FnDefinition[f]() -> (11-13)Ident("i64") {
                     (17-28)call((17)Ident("f"))(
                         (19-27)call((19)Ident("f"))(
                             (21-26)call((21)Ident("f"))(
@@ -1344,7 +1420,7 @@ mod parser_stmt_tests {
         check_parsing(
             "fn f() -> i64 { ;;1+2;;3+4;5+6;;; }",
             expect![[r#"
-                (1-35)FnDefinition[f]() {
+                (1-35)FnDefinition[f]() -> (11-13)Ident("i64") {
                     (19-21)Binary[Add(20)](
                         (19)Literal(Integer(1)),
                         (21)Literal(Integer(2)),
@@ -1383,7 +1459,11 @@ mod parser_stmt_tests {
         );
         check_parsing(
             "fn add(x:, y: i64)",
-            expect!["At 10: Expected an identifier to provide the type of the parameter 'x' for function 'add'. For example: `fn add(x: u64, y: u64) -> u64 { x + y }`"],
+            expect!["At 10: Expected a type here. Try 'i64' or '()'."],
+        );
+        check_parsing(
+            "fn add(x: i64 y: i64)",
+            expect!["At 15: Expected ',' after function parameter."],
         );
         check_parsing(
             "fn add(x: i64; y: i64)",

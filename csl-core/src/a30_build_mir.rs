@@ -37,7 +37,20 @@ struct TopCtx {
 
 /* Symbol-table stuff */
 impl TopCtx {
-    fn lookup_type(&self, ty: &Ident) -> Result<Type, Diag> {
+    fn lookup_type(&self, ty: &Expr) -> Result<Type, Diag> {
+        match &ty.body {
+            Literal(Lit::Unit) => Ok(Type::Unit),
+            IdentExpr(ident) => self.lookup_type_ident(&Ident {
+                // Silly clone here.
+                name: ident.clone(),
+                span: ty.span,
+            }),
+            Paren(inner) => self.lookup_type(inner),
+            _ => err(ME::NotAType { span: ty.span }),
+        }
+    }
+
+    fn lookup_type_ident(&self, ty: &Ident) -> Result<Type, Diag> {
         Ok(match ty.name.as_str() {
             "i64" => Type::I64,
             "f64" => Type::F64,
@@ -361,7 +374,10 @@ impl Ctx<'_> {
                 let if_bi = self.add_expr(if_block, if_node)?;
                 let else_bi = match else_node {
                     Some(else_node) => self.add_expr(else_block, else_node)?,
-                    None => (else_block, self.body.push_unit_new_ip(block, DUMMY_SPAN)),
+                    None => (
+                        else_block,
+                        self.body.push_unit_new_ip(else_block, DUMMY_SPAN),
+                    ),
                 };
                 let value_type = {
                     let if_type = self.body.get_type(if_bi.1);
@@ -1018,7 +1034,27 @@ mod build_mir_functions {
                   IP(2) = FnCall("add", [IP(0), IP(1)])
                   Return(IP(2))
             "#]],
-        )
+        );
+    }
+
+    #[test]
+    fn paren_params() {
+        check_build_mir(
+            "fn f(x: (i64)) -> (i64) { ret x; };",
+            expect![[r#"
+                fn f:
+                BP(0): BasicBlock
+                  Return(IP(0))
+            "#]],
+        );
+        check_build_mir(
+            "fn f(x: ()) -> () { ret x; };",
+            expect![[r#"
+                fn f:
+                BP(0): BasicBlock
+                  Return(IP(0))
+            "#]],
+        );
     }
 
     #[test]
@@ -1104,13 +1140,21 @@ mod build_mir_functions {
                 "At 27: Expected function 'f' to return type 'f64', but it returned type 'i64'"
             ],
         );
+    }
+
+    #[test]
+    fn type_repr_errors() {
         check_build_mir(
             "fn f(x: i64, y: i64) -> I64 { ret 1; };",
             expect!["At 25-27: Type 'I64' is not recognized. Try 'i64' or 'f64' instead."],
         );
         check_build_mir(
-            "fn f() -> i64 { ret f() + 1.0; };",
-            expect!["At 25: Type error: Cannot perform i64 + f64"],
+            "fn f() -> (1,2) { ret f() + 1.0; };",
+            expect!["At 13: Expected to see a ')' here."],
+        );
+        check_build_mir(
+            "fn f() -> -i64 { ret f() + 1.0; };",
+            expect!["At 11-14: This is not a valid representation of a type. Try something like 'i64' or '()' instead."],
         );
     }
 
@@ -1171,6 +1215,52 @@ mod build_mir_functions {
         check_build_mir(
             "fn f() -> i64 { ret 3+4; 1+2; }",
             expect!["At 17-23: Misplaced 'ret'. The keyword 'ret' can only be applied to the final statement in a block."],
+        );
+        check_build_mir(
+            "fn f(x: bool) -> i64 { if(x) (); ret 3+4; }",
+            expect![[r#"
+                fn f:
+                BP(0): BasicBlock
+                  If { cond: IP(0), true_branch: BP(1), false_branch: BP(2) }
+
+                BP(1): BasicBlock
+                  IP(1) = Literal(UnitValue)
+                  IP(3) = Use(IP(1))
+                  Goto { target: BP(3) }
+
+                BP(2): BasicBlock
+                  IP(2) = Literal(UnitValue)
+                  IP(3) = Use(IP(2))
+                  Goto { target: BP(3) }
+
+                BP(3): BasicBlock
+                  IP(4) = Literal(I64(3))
+                  IP(5) = Literal(I64(4))
+                  IP(6) = Binary(AddI64, IP(4), IP(5))
+                  Return(IP(6))
+            "#]],
+        );
+        check_build_mir(
+            "fn branch(x: bool) -> () { if (x) {} else (); }",
+            expect![[r#"
+                fn branch:
+                BP(0): BasicBlock
+                  If { cond: IP(0), true_branch: BP(1), false_branch: BP(2) }
+
+                BP(1): BasicBlock
+                  IP(1) = Literal(UnitValue)
+                  IP(3) = Use(IP(1))
+                  Goto { target: BP(3) }
+
+                BP(2): BasicBlock
+                  IP(2) = Literal(UnitValue)
+                  IP(3) = Use(IP(2))
+                  Goto { target: BP(3) }
+
+                BP(3): BasicBlock
+                  IP(4) = Literal(UnitValue)
+                  Return(IP(4))
+            "#]],
         );
     }
 

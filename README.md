@@ -10,12 +10,12 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 - Add mutable variables, making if-without-else useful.
 - Remove TODOs from source files, and move them here.
-- Allow typing `()` as return type of functions.
 - Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.
 - Allow type hints on variables.
 - Literals `true` and `false`.
 - `return` keyword as described in syntax.md.
 - `never` type to properly type "return"
+- Say "Syntax Error" etc in error messages. Maybe set this up as a category on the diagnostic object?
 - Codemirror in the web preview, to underline errors.
   - Ctrl-Enter to run code.
 - Figure how to type consequent parsing better. (macros?)

@@ -19,6 +19,14 @@ Booleans
   - These have short-circuiting semantics, so `b` will not run in `a && b` if `a` is false. Likewise, `b` will not run in `a || b` if `a` is true.
 - Planned: `true` and `false`
 
+Types
+
+- 64-bit signed integer `i64`
+- 64-bit float `f64`
+- Boolean `bool`
+- Unit `()` (zero bits of information)
+- Planned: `never` (unreachable code, Rust calls this `!`)
+
 Misc
 
 - Parentheses for grouping: `(1 + 2) * 3`

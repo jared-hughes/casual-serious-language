@@ -15,6 +15,7 @@ UnexpectedBinaryInitial => format!("Unexpected binary operator in initial positi
 UnmatchedCloseParen => format!("What's this ')' doing here? I don't see a '('"),
 UnexpectedEOF => format!("Hold your horses. An EOF already?"),
 GeneralUnexpected => format!("Unexpected token."),
+ParamExpComma => format!("Expected ',' after function parameter."),
 CallExpComma => format!("Expected ',' after function argument."),
 CallExpCloseParen => format!("Expected ')' to end function arguments."),
 FnBadComma => format!("Comma ',' is not allowed before first argument."),
@@ -30,6 +31,9 @@ IfExpOpenParen => {
 },
 IfExpCloseParen => {
     format!("Expected ')' to close condition of 'if' statement. {EXAMPLE_IF}")
+},
+ExpType => {
+    "Expected a type here. Try 'i64' or '()'.".to_string()
 },
 }
 
@@ -56,16 +60,6 @@ pub(crate) struct FnExpColon {
 }
 msg: self => format!(
     "Expected ':' to provide the type of the parameter '{1}' \
-    for function '{0}'. {EXAMPLE_FN}",
-    self.fn_name, self.param
-);
-
-pub(crate) struct FnExpParamType {
-    pub(crate) fn_name: Ident,
-    pub(crate) param: Ident,
-}
-msg: self => format!(
-    "Expected an identifier to provide the type of the parameter '{1}' \
     for function '{0}'. {EXAMPLE_FN}",
     self.fn_name, self.param
 );

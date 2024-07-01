@@ -220,5 +220,11 @@ msg: self => format!(
         self.right_type, self.kind
     );
 
+pub(crate) struct NotAType {
+    pub(crate) span: Span,
+}
+msg: self => format!(
+    "This is not a valid representation of a type. Try something like 'i64' or '()' instead."
+);
 
 }
