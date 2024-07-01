@@ -3,13 +3,13 @@ use crate::span::span;
 use crate::token::*;
 use std::str::{Chars, FromStr};
 
-pub struct Lexer<'a> {
+pub(crate) struct Lexer<'a> {
     lexer: RawLexer<'a>,
     pos: BytePos,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(input: &'a str) -> Lexer<'a> {
+    pub(crate) fn new(input: &'a str) -> Lexer<'a> {
         Lexer {
             lexer: RawLexer::new(input),
             pos: BytePos(0),
@@ -45,7 +45,7 @@ impl<'a> Iterator for Lexer<'a> {
 /// first character that has not been in a token yet.
 /// In the middle of finding the extent of a RawToken, `chars_token_start`
 /// points to the first character that will be in this token.
-pub struct RawLexer<'a> {
+pub(crate) struct RawLexer<'a> {
     /// Iterator pointing at the current character
     chars: Chars<'a>,
     /// Iterator pointing at the character which starts this token
@@ -69,7 +69,7 @@ impl<'a> Iterator for RawLexer<'a> {
 }
 
 impl<'a> RawLexer<'a> {
-    pub fn new(input: &'a str) -> RawLexer<'a> {
+    pub(crate) fn new(input: &'a str) -> RawLexer<'a> {
         RawLexer {
             chars: input.chars(),
             chars_token_start: input.chars(),

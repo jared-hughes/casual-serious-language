@@ -2,9 +2,9 @@ use crate::pos::ByteLen;
 use crate::span::Span;
 use std::fmt;
 
-pub use Lit::*;
+pub(crate) use Lit::*;
 #[derive(Debug, Clone, Copy)]
-pub enum Lit {
+pub(crate) enum Lit {
     /// e.g. `1`, `1e3`
     Integer(i64),
     /// e.g. `1.`, `1.0`, `1.0e3`
@@ -13,9 +13,9 @@ pub enum Lit {
     Unit,
 }
 
-pub use BinOpToken::*;
+pub(crate) use BinOpToken::*;
 #[derive(Debug, Clone, Copy)]
-pub enum BinOpToken {
+pub(crate) enum BinOpToken {
     /// `&&`
     And,
     /// `||`
@@ -42,18 +42,18 @@ pub enum BinOpToken {
     Slash,
 }
 
-pub use Delimiter::*;
+pub(crate) use Delimiter::*;
 #[derive(Debug, Clone, Copy)]
-pub enum Delimiter {
+pub(crate) enum Delimiter {
     /// `( ... )`
     Parenthesis,
     /// `{ ... }`
     CurlyBrace,
 }
 
-pub use Keyword::*;
+pub(crate) use Keyword::*;
 #[derive(Debug, Clone, Copy)]
-pub enum Keyword {
+pub(crate) enum Keyword {
     /// 'fn'
     Fn,
     /// 'ret'
@@ -66,9 +66,9 @@ pub enum Keyword {
     Else,
 }
 
-pub use TokenKind::*;
+pub(crate) use TokenKind::*;
 #[derive(Debug, Clone, Copy)]
-pub enum TokenKind<'a> {
+pub(crate) enum TokenKind<'a> {
     /* Operators */
     BinOp(BinOpToken),
 
@@ -107,18 +107,18 @@ pub enum TokenKind<'a> {
 
 // TODO: more standard error handling here.
 #[derive(Debug, Clone, Copy)]
-pub struct InvalidToken {
-    pub msg: &'static str,
+pub(crate) struct InvalidToken {
+    pub(crate) msg: &'static str,
 }
 
 #[derive(Clone, Copy)]
-pub struct TokenLen<'a> {
-    pub kind: TokenKind<'a>,
-    pub len: ByteLen,
+pub(crate) struct TokenLen<'a> {
+    pub(crate) kind: TokenKind<'a>,
+    pub(crate) len: ByteLen,
 }
 
 impl<'a> TokenLen<'a> {
-    pub fn new(kind: TokenKind<'a>, len: ByteLen) -> TokenLen<'a> {
+    pub(crate) fn new(kind: TokenKind<'a>, len: ByteLen) -> TokenLen<'a> {
         TokenLen { kind, len }
     }
 }
@@ -130,13 +130,13 @@ impl<'a> fmt::Debug for TokenLen<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Token<'a> {
-    pub kind: TokenKind<'a>,
-    pub span: Span,
+pub(crate) struct Token<'a> {
+    pub(crate) kind: TokenKind<'a>,
+    pub(crate) span: Span,
 }
 
 impl<'a> Token<'a> {
-    pub fn new(kind: TokenKind<'a>, span: Span) -> Token<'a> {
+    pub(crate) fn new(kind: TokenKind<'a>, span: Span) -> Token<'a> {
         Token { kind, span }
     }
 }

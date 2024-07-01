@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::{Add, Sub};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct BytePos(pub u32);
+pub(crate) struct BytePos(pub(crate) u32);
 
 impl From<usize> for BytePos {
     fn from(x: usize) -> Self {
@@ -38,7 +38,7 @@ impl Add<ByteLen> for BytePos {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct ByteLen(pub u32);
+pub(crate) struct ByteLen(pub(crate) u32);
 
 impl From<usize> for ByteLen {
     fn from(x: usize) -> Self {

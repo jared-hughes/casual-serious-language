@@ -34,25 +34,25 @@ IfExpCloseParen => {
 }
 
 def_token_errors! {
-pub struct FnExpParameter {
-    pub fn_name: Ident,
+pub(crate) struct FnExpParameter {
+    pub(crate) fn_name: Ident,
 }
 msg: self => format!(
     "Expected an identifier to serve as a function parameter for function '{0}'. {EXAMPLE_FN}",
     self.fn_name
 );
 
-pub struct FnExpOpenParen {
-    pub fn_name: Ident,
+pub(crate) struct FnExpOpenParen {
+    pub(crate) fn_name: Ident,
 }
 msg: self => format!(
     "Expected '(' to begin parameter declaration for function '{}'. {EXAMPLE_FN}",
     self.fn_name
 );
 
-pub struct FnExpColon {
-    pub fn_name: Ident,
-    pub param: Ident,
+pub(crate) struct FnExpColon {
+    pub(crate) fn_name: Ident,
+    pub(crate) param: Ident,
 }
 msg: self => format!(
     "Expected ':' to provide the type of the parameter '{1}' \
@@ -60,9 +60,9 @@ msg: self => format!(
     self.fn_name, self.param
 );
 
-pub struct FnExpParamType {
-    pub fn_name: Ident,
-    pub param: Ident,
+pub(crate) struct FnExpParamType {
+    pub(crate) fn_name: Ident,
+    pub(crate) param: Ident,
 }
 msg: self => format!(
     "Expected an identifier to provide the type of the parameter '{1}' \
@@ -70,70 +70,70 @@ msg: self => format!(
     self.fn_name, self.param
 );
 
-pub struct InvalidToken {
-    pub token: token::InvalidToken,
+pub(crate) struct InvalidToken {
+    pub(crate) token: token::InvalidToken,
 }
 msg: self => format!("{}", self.token.msg);
 
-pub struct FnExpComma {
-    pub fn_name: Ident,
-    pub param_name: Ident,
+pub(crate) struct FnExpComma {
+    pub(crate) fn_name: Ident,
+    pub(crate) param_name: Ident,
 }
 msg: self => format!(
     "Expected ',' after function parameter '{1}' for function '{0}'. {EXAMPLE_FN}",
     self.fn_name, self.param_name
 );
 
-pub struct FnExpCloseParen {
-    pub fn_name: Ident,
+pub(crate) struct FnExpCloseParen {
+    pub(crate) fn_name: Ident,
 }
 msg: self => format!(
     "Expected ')' to end function parameters for function '{0}'. {EXAMPLE_FN}",
     self.fn_name
 );
 
-pub struct FnExpThinArrow {
-    pub fn_name: Ident,
+pub(crate) struct FnExpThinArrow {
+    pub(crate) fn_name: Ident,
 }
 msg: self => format!(
     "Expected '->' to declare return type for function '{0}'. {EXAMPLE_FN}",
     self.fn_name
 );
 
-pub struct FnExpReturnType {
-    pub fn_name: Ident,
+pub(crate) struct FnExpReturnType {
+    pub(crate) fn_name: Ident,
 }
 msg: self => format!(
     "Expected an identifier to provide the return type for function '{0}'. {EXAMPLE_FN}",
     self.fn_name
 );
 
-pub struct FnExpOpenCurly {
-    pub fn_name: Ident,
+pub(crate) struct FnExpOpenCurly {
+    pub(crate) fn_name: Ident,
 }
 msg: self => format!(
     "Expected '{{' to begin the body of function '{0}'. {EXAMPLE_FN}",
     self.fn_name
 );
 
-pub struct FnExpCloseCurly {
-    pub fn_name: Ident,
+pub(crate) struct FnExpCloseCurly {
+    pub(crate) fn_name: Ident,
 }
 msg: self => format!(
     "Expected '}}' to end the body of function '{0}'. {EXAMPLE_FN}",
     self.fn_name
 );
 
-pub struct BlockExpCloseCurly {
-    pub open_curly: Span,
+pub(crate) struct BlockExpCloseCurly {
+    pub(crate) open_curly: Span,
 }
 msg: self => format!(
     "Expected '}}' to end the body of block started at '{0:?}'",
     self.open_curly
 );
 
-pub struct LetExpEquals {
-    pub ident: Ident,
+pub(crate) struct LetExpEquals {
+    pub(crate) ident: Ident,
 }
 msg: self => format!(
     "Expected an '=', to provide an initial value for '{0}'. {EXAMPLE_LET}",

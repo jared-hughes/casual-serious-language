@@ -1,4 +1,4 @@
-pub use crate::ast::{
+pub(crate) use crate::ast::{
     BinOpKind,
     Lit::{self, *},
 };
@@ -11,9 +11,9 @@ use index_vec::{index_vec, IndexVec};
 use std::collections::HashMap;
 use std::fmt;
 
-pub use RValue::*;
+pub(crate) use RValue::*;
 #[derive(Clone, Debug)]
-pub enum RValue {
+pub(crate) enum RValue {
     /// e.g. `1.0`;
     Literal(RuntimeValue),
     /// Pass through the argument unchanged.
@@ -26,9 +26,9 @@ pub enum RValue {
     FnCall(String, Vec<IP>),
 }
 
-pub use Statement::*;
+pub(crate) use Statement::*;
 #[derive(Clone)]
-pub enum Statement {
+pub(crate) enum Statement {
     Assign(IP, RValue, Span),
 }
 
@@ -40,8 +40,8 @@ impl fmt::Debug for Statement {
     }
 }
 
-pub struct Program {
-    pub fns: HashMap<String, FnBody>,
+pub(crate) struct Program {
+    pub(crate) fns: HashMap<String, FnBody>,
 }
 
 impl Default for Program {
@@ -51,7 +51,7 @@ impl Default for Program {
 }
 
 impl Program {
-    pub fn new() -> Program {
+    pub(crate) fn new() -> Program {
         Program {
             fns: HashMap::new(),
         }
@@ -75,19 +75,19 @@ impl fmt::Debug for Program {
 
 index_vec::define_index_type! {
     /// Block pointer into a vec of basic blocks
-    pub struct BP = u32;
+    pub(crate) struct BP = u32;
     MAX_INDEX = 0xFFFF_FF00;
     DEBUG_FORMAT = "BP({})";
 }
 
-pub struct FnBody {
-    pub params: Vec<Type>,
+pub(crate) struct FnBody {
+    pub(crate) params: Vec<Type>,
     blocks: IndexVec<BP, BasicBlockData>,
     types: IndexVec<IP, Type>,
 }
 
 impl FnBody {
-    pub fn new(params: Vec<Type>) -> FnBody {
+    pub(crate) fn new(params: Vec<Type>) -> FnBody {
         let types = IndexVec::from_vec(params.clone());
         FnBody {
             params,
@@ -96,67 +96,84 @@ impl FnBody {
         }
     }
 
-    pub fn new_basic_block(&mut self) -> BP {
+    pub(crate) fn new_basic_block(&mut self) -> BP {
         let ind = self.blocks.len();
         let block = BP::from_usize(ind);
         self.blocks.push(BasicBlockData::new());
         block
     }
 
-    pub fn get_type(&self, ip: IP) -> Type {
+    pub(crate) fn get_type(&self, ip: IP) -> Type {
         self.types[ip]
     }
 
     /// Create a new IP (local var) and assign to it.
-    pub fn push_assign_new_ip(&mut self, block: BP, inst: RValue, ty: Type, span: Span) -> IP {
+    pub(crate) fn push_assign_new_ip(
+        &mut self,
+        block: BP,
+        inst: RValue,
+        ty: Type,
+        span: Span,
+    ) -> IP {
         assert!(block < self.blocks.len());
         let ip = self.push_local(ty);
         self.blocks[block].stmts.push(Assign(ip, inst, span));
         ip
     }
 
-    pub fn push_constant(&mut self, block: BP, val: RuntimeValue, span: Span) -> IP {
+    pub(crate) fn push_constant(&mut self, block: BP, val: RuntimeValue, span: Span) -> IP {
         self.push_assign_new_ip(block, Literal(val), val.to_type(), span)
     }
 
-    pub fn push_constant_bi(&mut self, block: BP, val: RuntimeValue, span: Span) -> (BP, IP) {
+    pub(crate) fn push_constant_bi(
+        &mut self,
+        block: BP,
+        val: RuntimeValue,
+        span: Span,
+    ) -> (BP, IP) {
         (block, self.push_constant(block, val, span))
     }
 
-    pub fn assign_new_ip(&mut self, block: BP, inst: RValue, ty: Type, span: Span) -> (BP, IP) {
+    pub(crate) fn assign_new_ip(
+        &mut self,
+        block: BP,
+        inst: RValue,
+        ty: Type,
+        span: Span,
+    ) -> (BP, IP) {
         (block, self.push_assign_new_ip(block, inst, ty, span))
     }
 
-    pub fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {
+    pub(crate) fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {
         self.push_constant(block, RuntimeValue::UnitValue, span)
     }
 
     /// Create a new IP (local var)
-    pub fn push_local(&mut self, value_type: Type) -> IP {
+    pub(crate) fn push_local(&mut self, value_type: Type) -> IP {
         let ind = self.types.len();
         let ip = IP::from_usize(ind);
         self.types.push(value_type);
         ip
     }
 
-    pub fn num_locals(&self) -> usize {
+    pub(crate) fn num_locals(&self) -> usize {
         self.types.len()
     }
 
     /// Push a statement, checked.
-    pub fn push(&mut self, block: BP, stmt: Statement) {
+    pub(crate) fn push(&mut self, block: BP, stmt: Statement) {
         assert!(block < self.blocks.len());
         let Assign(ip, ref rval, _) = stmt;
         self.sanity_check_assign(ip, rval);
         self.blocks[block].stmts.push(stmt);
     }
 
-    pub fn set_terminator(&mut self, block: BP, term: Terminator) {
+    pub(crate) fn set_terminator(&mut self, block: BP, term: Terminator) {
         assert!(block < self.blocks.len());
         self.blocks[block].terminator = term;
     }
 
-    pub fn get_terminator(&self, block: BP) -> &Terminator {
+    pub(crate) fn get_terminator(&self, block: BP) -> &Terminator {
         &self.blocks[block].terminator
     }
 
@@ -186,7 +203,7 @@ impl FnBody {
         }
     }
 
-    pub fn iter_stmts(&self, block: BP) -> std::slice::Iter<Statement> {
+    pub(crate) fn iter_stmts(&self, block: BP) -> std::slice::Iter<Statement> {
         self.blocks[block].stmts.iter()
     }
 }
@@ -206,14 +223,14 @@ impl fmt::Debug for FnBody {
 
 index_vec::define_index_type! {
     /// IP stands for "instruction pointer" but this actually now means "local var"
-    pub struct IP = u32;
+    pub(crate) struct IP = u32;
     MAX_INDEX = 0xFFFF_FF00;
     DEBUG_FORMAT = "IP({})";
 }
 
-pub use Terminator::*;
+pub(crate) use Terminator::*;
 #[derive(Clone, Debug)]
-pub enum Terminator {
+pub(crate) enum Terminator {
     /// Basic blocks should only be unterminated during construction.
     Unterminated,
     /// Exits the function, returning the value given in IP.
@@ -230,12 +247,12 @@ pub enum Terminator {
 
 #[derive(Clone)]
 struct BasicBlockData {
-    pub stmts: IndexVec<IP, Statement>,
-    pub terminator: Terminator,
+    pub(crate) stmts: IndexVec<IP, Statement>,
+    pub(crate) terminator: Terminator,
 }
 
 impl BasicBlockData {
-    pub fn new() -> BasicBlockData {
+    pub(crate) fn new() -> BasicBlockData {
         BasicBlockData {
             stmts: IndexVec::new(),
             terminator: Unterminated,

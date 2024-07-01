@@ -38,7 +38,7 @@ fn expr(body: ast::ExprInner, span: Span) -> Bexpr {
     Box::new(ast::Expr::new(body, span))
 }
 
-pub fn parse(input: &str) -> ProgramResult {
+pub(crate) fn parse(input: &str) -> ProgramResult {
     Parser::new(input).parse()
 }
 
@@ -47,19 +47,19 @@ fn err<T>(x: impl Diagnostic) -> Result<T, Diag> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Parser<'a> {
+    pub(crate) fn new(input: &'a str) -> Parser<'a> {
         Parser {
             lexer: Lexer::new(input).peekable(),
         }
     }
 
-    pub fn parse(&mut self) -> ProgramResult {
+    pub(crate) fn parse(&mut self) -> ProgramResult {
         let prog = self.parse_program()?;
         self.assert_stream_done()?;
         Ok(prog)
     }
 
-    pub fn assert_stream_done(&mut self) -> Result<(), Diag> {
+    pub(crate) fn assert_stream_done(&mut self) -> Result<(), Diag> {
         let tok = self.peek()?;
         let Eof = tok.kind else {
             err(PE::ExpectedConsequent.span(tok.span))?
@@ -161,14 +161,14 @@ impl<'a> Parser<'a> {
 /* Expression parser */
 impl<'a> Parser<'a> {
     #[cfg(test)]
-    pub fn parse_expr_for_tests(&mut self) -> ExprResult {
+    pub(crate) fn parse_expr_for_tests(&mut self) -> ExprResult {
         let expr = self.parse_main(BindingPower::Top)?;
         self.assert_stream_done()?;
         Ok(expr)
     }
 
     /// Parse an expression
-    pub fn parse_main(&mut self, last_bp: BindingPower) -> ExprResult {
+    pub(crate) fn parse_main(&mut self, last_bp: BindingPower) -> ExprResult {
         let mut left = self.parse_initial()?;
         loop {
             if let Eof = self.peek()?.kind {

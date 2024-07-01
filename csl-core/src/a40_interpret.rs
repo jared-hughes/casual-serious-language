@@ -14,7 +14,7 @@ pub fn compile_and_interpret(input: &str) -> Result<RuntimeValue, Diag> {
     interpret_mir(&mir_program)
 }
 
-pub fn interpret_mir(program: &Program) -> RuntimeResult {
+pub(crate) fn interpret_mir(program: &Program) -> RuntimeResult {
     Interpreter::interpret(program)
 }
 
@@ -25,7 +25,7 @@ struct Interpreter<'prog> {
 type Memory = IndexVec<IP, RuntimeValue>;
 
 impl<'prog> Interpreter<'prog> {
-    pub fn interpret(program: &'prog Program) -> RuntimeResult {
+    pub(crate) fn interpret(program: &'prog Program) -> RuntimeResult {
         let interpreter = Interpreter { program };
         interpreter.run_fn("main", vec![])
     }

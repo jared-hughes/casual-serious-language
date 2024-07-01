@@ -1,7 +1,7 @@
 use crate::span::Span;
 use std::fmt;
 
-pub trait Diagnostic {
+pub(crate) trait Diagnostic {
     fn into_diag(self) -> Diag;
 }
 
@@ -9,8 +9,8 @@ pub trait Diagnostic {
 #[derive(Clone)]
 pub struct Diag {
     // TODO: severity, suggestions
-    pub message: String,
-    pub span: Span,
+    pub(crate) message: String,
+    pub(crate) span: Span,
 }
 
 impl fmt::Debug for Diag {
@@ -21,10 +21,10 @@ impl fmt::Debug for Diag {
 
 macro_rules! def_errors {
     ($(
-        pub struct $Err:ident $def:tt
+        pub(crate) struct $Err:ident $def:tt
         msg: $self:ident => $msg:expr;
     )+) => {$(
-        pub struct $Err $def
+        pub(crate) struct $Err $def
         impl Diagnostic for $Err {
             fn into_diag($self) -> Diag {
                 Diag {
@@ -42,12 +42,12 @@ pub(crate) use def_errors;
 /// Errors to pass into consume_ident!
 macro_rules! def_token_errors {
     ($(
-        pub struct $Err:ident $def:tt
+        pub(crate) struct $Err:ident $def:tt
         msg: $self:ident => $msg:expr;
     )+) => {$(
-        pub struct $Err $def
+        pub(crate) struct $Err $def
         impl $Err {
-            pub fn span(self, span: Span) -> Spanned<$Err> {
+            pub(crate) fn span(self, span: Span) -> Spanned<$Err> {
                 Spanned {node: self, span}
             }
             fn msg($self) -> String {
@@ -67,9 +67,9 @@ macro_rules! def_token_errors {
     ($(
         $Err:ident => $msg:expr,
     )+) => {$(
-        pub struct $Err;
+        pub(crate) struct $Err;
         impl $Err {
-            pub fn span(self, span: Span) -> Spanned<$Err> {
+            pub(crate) fn span(self, span: Span) -> Spanned<$Err> {
                 Spanned {node: self, span}
             }
             fn msg(self) -> String {

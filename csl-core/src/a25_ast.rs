@@ -1,10 +1,10 @@
 use crate::span::{Span, Spanned};
-pub use crate::token::Lit;
+pub(crate) use crate::token::Lit;
 use std::fmt;
 
-pub use CompareOpKind::*;
+pub(crate) use CompareOpKind::*;
 #[derive(Clone, Copy, Debug)]
-pub enum CompareOpKind {
+pub(crate) enum CompareOpKind {
     /// `<`
     Lt,
     /// `<=`
@@ -33,9 +33,9 @@ impl fmt::Display for CompareOpKind {
     }
 }
 
-pub use BinOpKind::*;
+pub(crate) use BinOpKind::*;
 #[derive(Clone, Copy, Debug)]
-pub enum BinOpKind {
+pub(crate) enum BinOpKind {
     Compare(CompareOpKind),
     /// Boolean OR (`||`)
     Or,
@@ -71,11 +71,11 @@ impl fmt::Display for BinOpKind {
     }
 }
 
-pub type BinOp = Spanned<BinOpKind>;
+pub(crate) type BinOp = Spanned<BinOpKind>;
 
-pub use UnaryOpKind::*;
+pub(crate) use UnaryOpKind::*;
 #[derive(Clone, Copy, Debug)]
-pub enum UnaryOpKind {
+pub(crate) enum UnaryOpKind {
     /// Negation (`-`)
     Neg,
     /// Not (`!`)
@@ -92,12 +92,12 @@ impl fmt::Display for UnaryOpKind {
     }
 }
 
-pub type UnaryOp = Spanned<UnaryOpKind>;
+pub(crate) type UnaryOp = Spanned<UnaryOpKind>;
 
 #[derive(Clone, Debug)]
-pub struct Ident {
-    pub name: String,
-    pub span: Span,
+pub(crate) struct Ident {
+    pub(crate) name: String,
+    pub(crate) span: Span,
 }
 
 impl fmt::Display for Ident {
@@ -106,20 +106,20 @@ impl fmt::Display for Ident {
     }
 }
 
-pub struct FunctionParam {
-    pub name: Ident,
-    pub param_type: Ident,
+pub(crate) struct FunctionParam {
+    pub(crate) name: Ident,
+    pub(crate) param_type: Ident,
 }
 
-pub struct FunctionDefinition {
-    pub fn_name: Ident,
-    pub params: Vec<FunctionParam>,
-    pub body: Vec<Expr>,
-    pub return_type: Ident,
+pub(crate) struct FunctionDefinition {
+    pub(crate) fn_name: Ident,
+    pub(crate) params: Vec<FunctionParam>,
+    pub(crate) body: Vec<Expr>,
+    pub(crate) return_type: Ident,
 }
 
-pub use ExprInner::*;
-pub enum ExprInner {
+pub(crate) use ExprInner::*;
+pub(crate) enum ExprInner {
     /// One-parameter operation like `-x`
     Unary(UnaryOp, Box<Expr>),
     /// Binary operation like `a + b`
@@ -146,13 +146,13 @@ pub enum ExprInner {
     If(Box<Expr>, Box<Expr>, Option<Box<Expr>>),
 }
 
-pub struct Expr {
-    pub body: ExprInner,
-    pub span: Span,
+pub(crate) struct Expr {
+    pub(crate) body: ExprInner,
+    pub(crate) span: Span,
 }
 
 impl Expr {
-    pub fn new(body: ExprInner, span: Span) -> Expr {
+    pub(crate) fn new(body: ExprInner, span: Span) -> Expr {
         Expr { body, span }
     }
 }
@@ -219,8 +219,8 @@ impl fmt::Debug for Expr {
     }
 }
 
-pub struct Program {
-    pub body: Vec<Expr>,
+pub(crate) struct Program {
+    pub(crate) body: Vec<Expr>,
 }
 
 impl fmt::Debug for Program {

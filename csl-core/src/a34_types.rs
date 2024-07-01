@@ -1,8 +1,8 @@
 use std::fmt;
 
-pub use Type::*;
+pub(crate) use Type::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Type {
+pub(crate) enum Type {
     /// An unsigned 64-bit integer.
     I64,
     /// A 64-bit float (binary64 from IEEE-754).

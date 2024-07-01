@@ -3,30 +3,30 @@ use crate::intrinsics::{OP1, OP2};
 use crate::runtime_value::RuntimeValue;
 use crate::span::Span;
 
-pub struct TypeAssertionFailedBinary {
-    pub op: OP2,
-    pub args: (RuntimeValue, RuntimeValue),
+pub(crate) struct TypeAssertionFailedBinary {
+    pub(crate) op: OP2,
+    pub(crate) args: (RuntimeValue, RuntimeValue),
 }
 
 impl TypeAssertionFailedBinary {
-    pub fn up(self) -> RuntimeErrorInner {
+    pub(crate) fn up(self) -> RuntimeErrorInner {
         RuntimeErrorInner::TypeAssertionFailedBinary(self)
     }
 }
 
-pub struct TypeAssertionFailedUnary {
-    pub op: OP1,
-    pub args: RuntimeValue,
+pub(crate) struct TypeAssertionFailedUnary {
+    pub(crate) op: OP1,
+    pub(crate) args: RuntimeValue,
 }
 
 impl TypeAssertionFailedUnary {
-    pub fn up(self) -> RuntimeErrorInner {
+    pub(crate) fn up(self) -> RuntimeErrorInner {
         RuntimeErrorInner::TypeAssertionFailedUnary(self)
     }
 }
 
 use RuntimeErrorInner::*;
-pub enum RuntimeErrorInner {
+pub(crate) enum RuntimeErrorInner {
     TypeAssertionFailedBinary(TypeAssertionFailedBinary),
     TypeAssertionFailedUnary(TypeAssertionFailedUnary),
     MissingFunction(String),
@@ -34,14 +34,14 @@ pub enum RuntimeErrorInner {
 }
 
 impl RuntimeErrorInner {
-    pub fn span(self, span: Span) -> Diag {
+    pub(crate) fn span(self, span: Span) -> Diag {
         RuntimeError { inner: self, span }.into_diag()
     }
 }
 
-pub struct RuntimeError {
-    pub inner: RuntimeErrorInner,
-    pub span: Span,
+pub(crate) struct RuntimeError {
+    pub(crate) inner: RuntimeErrorInner,
+    pub(crate) span: Span,
 }
 
 impl Diagnostic for RuntimeError {

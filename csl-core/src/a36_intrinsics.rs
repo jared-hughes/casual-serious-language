@@ -4,16 +4,16 @@ use crate::types::Type;
 
 type FunctionResult = Result<RuntimeValue, RuntimeErrorInner>;
 
-pub struct Intrinsic1 {
-    pub param_types: Type,
-    pub return_type: Type,
-    pub compute: fn(RuntimeValue) -> FunctionResult,
+pub(crate) struct Intrinsic1 {
+    pub(crate) param_types: Type,
+    pub(crate) return_type: Type,
+    pub(crate) compute: fn(RuntimeValue) -> FunctionResult,
 }
 
-pub struct Intrinsic2 {
-    pub param_types: (Type, Type),
-    pub return_type: Type,
-    pub compute: fn(RuntimeValue, RuntimeValue) -> FunctionResult,
+pub(crate) struct Intrinsic2 {
+    pub(crate) param_types: (Type, Type),
+    pub(crate) return_type: Type,
+    pub(crate) compute: fn(RuntimeValue, RuntimeValue) -> FunctionResult,
 }
 
 macro_rules! def_int {
@@ -26,13 +26,13 @@ macro_rules! def_int {
         )+
     ) => {
         #[derive(Clone, Copy, Debug)]
-        pub enum $OP {
+        pub(crate) enum $OP {
             $($op),*
         }
 
         impl $OP {
             // Lookup into the functions
-            pub fn get_intrinsic(self) -> $Intrinsic {
+            pub(crate) fn get_intrinsic(self) -> $Intrinsic {
                 match self {
                     $(
                         $OP::$op => $Intrinsic {

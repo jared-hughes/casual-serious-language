@@ -11,13 +11,13 @@ use crate::span::{Span, DUMMY_SPAN};
 use crate::symbol_table::SymbolTable;
 use crate::types::*;
 
-pub fn ast_to_mir(program: &Program) -> Result<mir::Program, Diag> {
+pub(crate) fn ast_to_mir(program: &Program) -> Result<mir::Program, Diag> {
     TopCtx::build_mir(program)
 }
 
-pub struct FunctionParam {
-    pub name: Ident,
-    pub param_type: Type,
+pub(crate) struct FunctionParam {
+    pub(crate) name: Ident,
+    pub(crate) param_type: Type,
 }
 
 struct FnSignature {
@@ -68,7 +68,7 @@ impl TopCtx {
 
 /* Statement-level */
 impl TopCtx {
-    pub fn build_mir(program: &Program) -> Result<mir::Program, Diag> {
+    pub(crate) fn build_mir(program: &Program) -> Result<mir::Program, Diag> {
         let mut top_level_ctx = Self {
             mir_program: mir::Program::new(),
             fn_table: HashMap::new(),
@@ -106,8 +106,8 @@ impl TopCtx {
 /// Expression-level context
 struct Ctx<'ctx> {
     top_ctx: &'ctx TopCtx,
-    pub body: &'ctx mut mir::FnBody,
-    pub symbol_table: SymbolTable<'ctx>,
+    pub(crate) body: &'ctx mut mir::FnBody,
+    pub(crate) symbol_table: SymbolTable<'ctx>,
 }
 
 impl Ctx<'_> {

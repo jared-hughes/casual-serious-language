@@ -15,7 +15,7 @@ pub enum RuntimeValue {
 pub type RuntimeResult = Result<RuntimeValue, Diag>;
 
 impl RuntimeValue {
-    pub fn to_type(&self) -> Type {
+    pub(crate) fn to_type(&self) -> Type {
         match self {
             I64(_) => Type::I64,
             F64(_) => Type::F64,
@@ -36,7 +36,7 @@ impl fmt::Display for RuntimeValue {
     }
 }
 
-pub fn cook_lit(lit: Lit) -> RuntimeValue {
+pub(crate) fn cook_lit(lit: Lit) -> RuntimeValue {
     match lit {
         Lit::Integer(x) => I64(x),
         Lit::Float(x) => F64(x),
