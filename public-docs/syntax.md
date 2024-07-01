@@ -15,8 +15,9 @@ Booleans
 
 - Comparison: `1 < 2`, `3 >= 3`, `3 == 3`, `4 != 2`.
 - Boolean NOT: `!(3 < 2)`.
+- Logical connectives: `true && true` and `true || false`.
+  - These have short-circuiting semantics, so `b` will not run in `a && b` if `a` is false. Likewise, `b` will not run in `a || b` if `a` is true.
 - Planned: `true` and `false`
-- Planned: `true && true` and `false || false`
 
 Misc
 

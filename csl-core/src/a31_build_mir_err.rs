@@ -198,5 +198,27 @@ msg: self => format!(
         self.cond_type
     );
 
+pub struct WrongAndOrConditionType {
+    pub span: Span,
+    pub cond_type: Type,
+    /// Kind should either be `And` or `Or`
+    pub kind: BinOpKind
+}
+msg: self => format!(
+        "Expected first argument of '{1}' to be 'Bool' but got type '{0}'.",
+        self.cond_type, self.kind
+    );
+
+pub struct WrongAndOrSecondType {
+    pub span: Span,
+    pub right_type: Type,
+    /// Kind should either be `And` or `Or`
+    pub kind: BinOpKind
+}
+msg: self => format!(
+        "Expected second argument of '{1}' to be 'Bool' but got type '{0}'.",
+        self.right_type, self.kind
+    );
+
 
 }

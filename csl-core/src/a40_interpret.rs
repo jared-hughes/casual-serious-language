@@ -189,6 +189,18 @@ mod interpret_expr_tests {
         check_interpret_mir("if (1 > 0) 2 else 3", expect!["At 25-43: Expected function 'main' to return type 'bool', but it returned type 'i64'"]);
         check_interpret_mir("if (0 > 0) 2 else 3", expect!["At 25-43: Expected function 'main' to return type 'bool', but it returned type 'i64'"]);
     }
+
+    #[test]
+    fn logical_connectives() {
+        check_interpret_mir("(1>0) || (1>0)", expect!["Bool(true)"]);
+        check_interpret_mir("(1>0) || (0>0)", expect!["Bool(true)"]);
+        check_interpret_mir("(0>0) || (1>0)", expect!["Bool(true)"]);
+        check_interpret_mir("(0>0) || (0>0)", expect!["Bool(false)"]);
+        check_interpret_mir("(1>0) && (1>0)", expect!["Bool(true)"]);
+        check_interpret_mir("(1>0) && (0>0)", expect!["Bool(false)"]);
+        check_interpret_mir("(0>0) && (1>0)", expect!["Bool(false)"]);
+        check_interpret_mir("(0>0) && (0>0)", expect!["Bool(false)"]);
+    }
 }
 
 #[cfg(test)]
@@ -285,6 +297,29 @@ mod interpret_stmt_tests {
             }
             fn main() -> i64 { ret fib(12); }",
             expect!["I64(144)"],
+        );
+    }
+
+    #[test]
+    fn short_circuit() {
+        // If these didn't short circuit, they would stack overflow.
+        check_interpret_mir(
+            "fn inf_loop(n: i64) -> bool {
+                ret inf_loop(n);
+            }
+            fn main() -> bool {
+                ret (1 > 0) || inf_loop(0);
+            }",
+            expect!["Bool(true)"],
+        );
+        check_interpret_mir(
+            "fn inf_loop(n: i64) -> bool {
+                ret inf_loop(n);
+            }
+            fn main() -> bool {
+                ret (0 > 0) && inf_loop(0);
+            }",
+            expect!["Bool(false)"],
         );
     }
 }

@@ -117,6 +117,14 @@ impl FnBody {
         ip
     }
 
+    pub fn assign_new_ip(&mut self, block: BP, inst: RValue, span: Span) -> (BP, IP) {
+        assert!(block < self.blocks.len());
+        let value_type = self.compute_type(&inst);
+        let ip = self.push_local(value_type);
+        self.blocks[block].stmts.push(Assign(ip, inst, span));
+        (block, ip)
+    }
+
     pub fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {
         self.push_assign_new_ip(block, Literal(crate::ast::Lit::Unit), span)
     }

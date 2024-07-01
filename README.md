@@ -8,11 +8,12 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 ## Next Steps
 
-- Allow typing `()` as return type of functions.
-- Allow type hints on variables.
-- Compile `a && b` to `if (a) b else false` to get correct short-circuiting.
-  - Note `&&` and `||` is not currently implemented for this reason.
 - Add mutable variables, making if-without-else useful.
+- `Type` not needed inside MIR instructions. See "TODO: Don't want to include type here, and on FnCall."
+- Remove TODOs from source files, and move them here.
+- Allow typing `()` as return type of functions.
+- Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.
+- Allow type hints on variables.
 - Deflatten `KwIf` etc to `Kw(If)`.
 - Literals `true` and `false`.
 - `return` keyword as described in syntax.md.

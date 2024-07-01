@@ -226,11 +226,70 @@ impl Ctx<'_> {
                 let (block, arg) = self.add_expr(block, arg_node)?;
                 (block, self.body.add_unary(block, *op, arg)?)
             }
-            Binary(op, left_node, right_node) => {
-                let (block, left) = self.add_expr(block, left_node)?;
-                let (block, right) = self.add_expr(block, right_node)?;
-                (block, self.body.add_binary(block, *op, left, right)?)
-            }
+            Binary(op, left_node, right_node) => match op.node {
+                Or | And => {
+                    let (block, cond_ip) = self.add_expr(block, left_node)?;
+                    {
+                        let cond_type = self.body.get_type(cond_ip);
+                        if cond_type != Bool {
+                            err(ME::WrongAndOrConditionType {
+                                span: left_node.span,
+                                cond_type,
+                                kind: op.node,
+                            })?;
+                        }
+                    }
+                    // Fork
+                    let (if_block, else_block) = self.fork_if_else(block, cond_ip);
+                    // Calculate on each fork
+                    let (if_bi, else_bi) = if let And = op.node {
+                        // a && b => a ? b : a
+                        let if_bi = self.add_expr(if_block, right_node)?;
+                        {
+                            let right_type = self.body.get_type(if_bi.1);
+                            if right_type != Bool {
+                                err(ME::WrongAndOrSecondType {
+                                    span: left_node.span,
+                                    right_type,
+                                    kind: op.node,
+                                })?;
+                            }
+                        }
+                        // TODO: replace cond_ip with a literal False
+                        let else_bi = self.body.assign_new_ip(
+                            else_block,
+                            mir::Use(cond_ip, Bool),
+                            DUMMY_SPAN,
+                        );
+                        (if_bi, else_bi)
+                    } else {
+                        // a || b => a ? a : b
+                        // TODO: replace cond_ip with a literal True
+                        let if_bi =
+                            self.body
+                                .assign_new_ip(if_block, mir::Use(cond_ip, Bool), DUMMY_SPAN);
+                        let else_bi = self.add_expr(else_block, right_node)?;
+                        {
+                            let right_type = self.body.get_type(else_bi.1);
+                            if right_type != Bool {
+                                err(ME::WrongAndOrSecondType {
+                                    span: left_node.span,
+                                    right_type,
+                                    kind: op.node,
+                                })?;
+                            }
+                        }
+                        (if_bi, else_bi)
+                    };
+                    // Join
+                    self.join_if_else_returns(Bool, if_bi, else_bi)
+                }
+                _ => {
+                    let (block, left) = self.add_expr(block, left_node)?;
+                    let (block, right) = self.add_expr(block, right_node)?;
+                    (block, self.body.add_binary(block, *op, left, right)?)
+                }
+            },
             FnDefinition(fn_def) => err(ME::FnInExpr {
                 span: fn_def.fn_name.span,
             })?,
@@ -296,26 +355,16 @@ impl Ctx<'_> {
                     }
                 }
                 // Setup diamond shape
-                let if_block = self.body.new_basic_block();
-                let else_block = self.body.new_basic_block();
-                self.body.set_terminator(
-                    block,
-                    mir::If {
-                        cond: cond_ip,
-                        true_branch: if_block,
-                        false_branch: else_block,
-                    },
-                );
+                let (if_block, else_block) = self.fork_if_else(block, cond_ip);
                 // Add branches
-                let (if_block, if_ip) = self.add_expr(if_block, if_node)?;
-                let (else_block, else_ip) = match else_node {
+                let if_bi = self.add_expr(if_block, if_node)?;
+                let else_bi = match else_node {
                     Some(else_node) => self.add_expr(else_block, else_node)?,
                     None => (else_block, self.body.push_unit_new_ip(block, DUMMY_SPAN)),
                 };
-                let out_block = self.body.new_basic_block();
                 let value_type = {
-                    let if_type = self.body.get_type(if_ip);
-                    let else_type = self.body.get_type(else_ip);
+                    let if_type = self.body.get_type(if_bi.1);
+                    let else_type = self.body.get_type(else_bi.1);
                     if if_type != else_type {
                         match else_node {
                             Some(else_node) => err(ME::WrongElseType {
@@ -332,22 +381,58 @@ impl Ctx<'_> {
                     if_type
                 };
                 // Reconstruct value back to output branch
-                let out_val = self.body.push_local(value_type);
-                self.body.push(
-                    if_block,
-                    mir::Assign(out_val, mir::Use(if_ip, value_type), if_node.span),
-                );
-                self.body.push(
-                    else_block,
-                    mir::Assign(out_val, mir::Use(else_ip, value_type), if_node.span),
-                );
-                self.body
-                    .set_terminator(if_block, mir::Goto { target: out_block });
-                self.body
-                    .set_terminator(else_block, mir::Goto { target: out_block });
-                (out_block, out_val)
+                self.join_if_else_returns(value_type, if_bi, else_bi)
             }
         })
+    }
+
+    /// Precondition: caller checks `cond_ip` points to a Bool.
+    fn fork_if_else(&mut self, block: BP, cond_ip: IP) -> (BP, BP) {
+        assert!(self.body.get_type(cond_ip) == Bool);
+        let if_block = self.body.new_basic_block();
+        let else_block = self.body.new_basic_block();
+        self.body.set_terminator(
+            block,
+            mir::If {
+                cond: cond_ip,
+                true_branch: if_block,
+                false_branch: else_block,
+            },
+        );
+        (if_block, else_block)
+    }
+
+    fn join_if_else(&mut self, if_block: BP, else_block: BP) -> BP {
+        let out_block = self.body.new_basic_block();
+        self.body
+            .set_terminator(if_block, mir::Goto { target: out_block });
+        self.body
+            .set_terminator(else_block, mir::Goto { target: out_block });
+        out_block
+    }
+
+    /// Precondition: `if_ip` and `else_ip` have the same type (`value_type`)
+    fn join_if_else_returns(
+        &mut self,
+        value_type: Type,
+        if_bi: (BP, IP),
+        else_bi: (BP, IP),
+    ) -> (BP, IP) {
+        let (if_block, if_ip) = if_bi;
+        let (else_block, else_ip) = else_bi;
+        assert!(self.body.get_type(if_ip) == value_type);
+        assert!(self.body.get_type(else_ip) == value_type);
+        let out_val = self.body.push_local(value_type);
+        self.body.push(
+            if_block,
+            mir::Assign(out_val, mir::Use(if_ip, value_type), DUMMY_SPAN),
+        );
+        self.body.push(
+            else_block,
+            mir::Assign(out_val, mir::Use(else_ip, value_type), DUMMY_SPAN),
+        );
+        let out_block = self.join_if_else(if_block, else_block);
+        (out_block, out_val)
     }
 }
 
@@ -733,6 +818,86 @@ mod build_mir_expr_hard {
             "i64",
             "if(2>1) 3",
             expect!["At 29: Expected else branch to return type 'i64' (the same type as this 'if' branch), but there is no else branch. Try removing 'ret' from the 'if' branch, or adding an 'else' branch."],
+        );
+    }
+
+    #[test]
+    fn and_or() {
+        check_build_mir(
+            "bool",
+            "(1>2) || (3==4)",
+            expect![[r#"
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(GtI64, IP(0), IP(1))
+                  If { cond: IP(2), true_branch: BP(1), false_branch: BP(2) }
+
+                BP(1): BasicBlock
+                  IP(3) = Use(IP(2), Bool)
+                  IP(7) = Use(IP(3), Bool)
+                  Goto { target: BP(3) }
+
+                BP(2): BasicBlock
+                  IP(4) = Literal(Integer(3))
+                  IP(5) = Literal(Integer(4))
+                  IP(6) = Binary(EqI64, IP(4), IP(5))
+                  IP(7) = Use(IP(6), Bool)
+                  Goto { target: BP(3) }
+
+                BP(3): BasicBlock
+                  Return(IP(7))
+            "#]],
+        );
+        check_build_mir(
+            "bool",
+            "(1>2) && (3==4)",
+            expect![[r#"
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(GtI64, IP(0), IP(1))
+                  If { cond: IP(2), true_branch: BP(1), false_branch: BP(2) }
+
+                BP(1): BasicBlock
+                  IP(3) = Literal(Integer(3))
+                  IP(4) = Literal(Integer(4))
+                  IP(5) = Binary(EqI64, IP(3), IP(4))
+                  IP(7) = Use(IP(5), Bool)
+                  Goto { target: BP(3) }
+
+                BP(2): BasicBlock
+                  IP(6) = Use(IP(2), Bool)
+                  IP(7) = Use(IP(6), Bool)
+                  Goto { target: BP(3) }
+
+                BP(3): BasicBlock
+                  Return(IP(7))
+            "#]],
+        );
+    }
+
+    #[test]
+    fn and_or_errors() {
+        check_build_mir(
+            "bool",
+            "1 || (1 > 0)",
+            expect!["At 22: Expected first argument of '||' to be 'Bool' but got type 'i64'."],
+        );
+        check_build_mir(
+            "i64",
+            "(1>0) || 1",
+            expect!["At 21-25: Expected second argument of '||' to be 'Bool' but got type 'i64'."],
+        );
+        check_build_mir(
+            "bool",
+            "1 && (1 > 0)",
+            expect!["At 22: Expected first argument of '&&' to be 'Bool' but got type 'i64'."],
+        );
+        check_build_mir(
+            "i64",
+            "(1>0) && 1",
+            expect!["At 21-25: Expected second argument of '&&' to be 'Bool' but got type 'i64'."],
         );
     }
 }
