@@ -107,12 +107,20 @@ msg: self => format!(
         applied to the final statement in a block."
     );
 
-pub struct MissingRet {
+pub struct FnMissingRet {
     pub span: Span
 }
 msg: self => format!(
         "Unit type '()' has not yet been implemented, so \
         all functions must have a return. Try adding 'ret'."
+    );
+
+pub struct BlockMissingRet {
+    pub span: Span
+}
+msg: self => format!(
+        "Unit type '()' has not yet been implemented, so \
+        all blocks must have a return. Try adding 'ret'."
     );
 
 pub struct TooManyArgs {
@@ -174,4 +182,26 @@ pub struct DuplicateFnName {
     pub name: String
 }
 msg: self => format!("Duplicate function '{0}' already defined.", self.name);
+
+pub struct WrongElseType {
+    pub span: Span,
+    pub if_type: Type,
+    pub else_type: Type,
+}
+msg: self => format!(
+        "Expected else branch to return type '{0}' (the same type as the 'if' branch), \
+        but the else branch returned type '{1}'.",
+        self.if_type, self.else_type
+    );
+
+pub struct WrongIfConditionType {
+    pub span: Span,
+    pub cond_type: Type,
+}
+msg: self => format!(
+        "Expected 'if' to branch on a boolean ('Bool') but got type '{0}'.",
+        self.cond_type
+    );
+
+
 }

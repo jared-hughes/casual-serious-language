@@ -4,8 +4,8 @@ use crate::span::{Span, Spanned};
 use crate::token;
 
 const EXAMPLE_FN: &str = "For example: `fn add(x: u64, y: u64) -> u64 { x + y }`";
-
 const EXAMPLE_LET: &str = "For example: `let x = 5;`";
+const EXAMPLE_IF: &str = "For example: `if (x > 5) 1 else 0`.";
 
 def_token_errors! {
 ExpectedConsequent => format!("Unexpected token here. A binary operator like + may be preferred."),
@@ -24,6 +24,12 @@ FnExpectedName => {
 },
 ComparatorChainDisallowed => {
     format!("Chaining comparison operations is not yet supported.")
+},
+IfExpOpenParen => {
+    format!("Expected '(' for condition of 'if' statement. {EXAMPLE_IF}")
+},
+IfExpCloseParen => {
+    format!("Expected ')' to close condition of 'if' statement. {EXAMPLE_IF}")
 },
 }
 

@@ -214,6 +214,7 @@ impl<'a> Parser<'a> {
             KwFn => self.parse_fn(start),
             OpenDelim(CurlyBrace) => self.parse_block(start),
             KwLet => self.parse_let(start),
+            KwIf => self.parse_if(start),
             Bang => {
                 let inner = self.parse_main(BindingPower::Prefix)?;
                 let unop = respan(ast::UnaryOpKind::Not, start.span);
@@ -223,7 +224,7 @@ impl<'a> Parser<'a> {
             BinOp(_) => err(PE::UnexpectedBinaryInitial.span(start.span)),
             CloseDelim(Parenthesis) => err(PE::UnmatchedCloseParen.span(start.span)),
             Eof => err(PE::UnexpectedEOF.span(start.span)),
-            CloseDelim(CurlyBrace) | Colon | Comma | ThinArrow | Semi | Equals => {
+            CloseDelim(CurlyBrace) | KwElse | Colon | Comma | ThinArrow | Semi | Equals => {
                 err(PE::GeneralUnexpected.span(start.span))
             }
             Whitespace | Invalid(_) => panic!("Whitespace should be skipped"),
@@ -386,6 +387,27 @@ impl<'a> Parser<'a> {
         let s = span(let_token.span.lo, init.span.hi);
         return Ok(expr(ast::Let(let_token.span, ident, init), s));
     }
+
+    fn parse_if(&mut self, if_token: Token) -> ExprResult {
+        // (
+        consume_token!(self, OpenDelim(Parenthesis), PE::IfExpOpenParen);
+        // x > 2
+        let cond = self.parse_main(BindingPower::Top)?;
+        // )
+        consume_token!(self, CloseDelim(Parenthesis), PE::IfExpCloseParen);
+        let true_branch = self.parse_main(BindingPower::Top)?;
+        let (false_branch, hi) = if let KwElse = self.peek()?.kind {
+            // else
+            self.next()?;
+            let false_branch = self.parse_main(BindingPower::Top)?;
+            let hi = false_branch.span.hi;
+            (Some(false_branch), hi)
+        } else {
+            (None, true_branch.span.hi)
+        };
+        let s = span(if_token.span.lo, hi);
+        return Ok(expr(ast::If(cond, true_branch, false_branch), s));
+    }
 }
 
 fn binop_power(t: BinOpToken) -> BindingPower {
@@ -423,7 +445,7 @@ fn terminates_block(tok: TokenKind) -> bool {
     match tok {
         CloseDelim(_) | Eof | Invalid(_) => true,
         Semi | BinOp(_) | OpenDelim(_) | ThinArrow | Comma | Literal(_) | Colon | Ident(_)
-        | KwFn | KwRet | KwLet | Equals | Bang => false,
+        | KwFn | KwRet | KwLet | KwIf | KwElse | Equals | Bang => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }
@@ -437,7 +459,9 @@ fn terminates_fn_params(tok: TokenKind) -> bool {
         Bang | BinOp(_) | OpenDelim(_) | CloseDelim(_) | Eof | ThinArrow | Invalid(_) | Semi => {
             true
         }
-        Comma | Literal(_) | Colon | Ident(_) | KwFn | KwRet | KwLet | Equals => false,
+        Comma | Literal(_) | Colon | Ident(_) | KwFn | KwRet | KwLet | KwIf | KwElse | Equals => {
+            false
+        }
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }
@@ -695,6 +719,11 @@ mod parser_expr_tests {
                     (4)Ident("x"),
                 ),
             )"#]],
+        );
+        check_parsing(
+            // TODO-parsing: This is wrong.
+            "f(-x)",
+            expect!["At 3: Expected ')' to end function arguments."],
         );
         check_parsing(
             "!f(x)",
@@ -1078,6 +1107,95 @@ mod parser_expr_tests {
                     (12)Literal(Integer(4)),
                 )"#]],
         )
+    }
+
+    #[test]
+    fn if_expr_parse_errors() {
+        check_parsing(
+            "if x>2 {1} else {0}",
+            expect!["At 4: Expected '(' for condition of 'if' statement. For example: `if (x > 5) 1 else 0`."],
+        );
+        check_parsing(
+            "if (x>2 {1} else {0}",
+            expect!["At 9: Expected ')' to close condition of 'if' statement. For example: `if (x > 5) 1 else 0`."],
+        );
+        check_parsing(
+            "if () 1 else 0",
+            // TODO-errormsg: Better message here
+            expect!["At 5: What's this ')' doing here? I don't see a '('"],
+        );
+        check_parsing(
+            "if (x) else 0",
+            // TODO-errormsg: Better message here
+            expect!["At 8-11: Unexpected token."],
+        );
+        check_parsing(
+            "if (x) 1 else",
+            expect!["At (!14,14!): Hold your horses. An EOF already?"],
+        );
+    }
+
+    #[test]
+    fn if_expr() {
+        check_parsing(
+            "if (x) 1",
+            expect![[r#"
+                (1-8)If {
+                    cond: (5)Ident("x"),
+                    true: (8)Literal(Integer(1)),
+                    false: None,
+                }"#]],
+        );
+        check_parsing(
+            "if (x>2) 1 else 0",
+            expect![[r#"
+                (1-17)If {
+                    cond: (5-7)Binary[Compare(Gt)(6)](
+                        (5)Ident("x"),
+                        (7)Literal(Integer(2)),
+                    ),
+                    true: (10)Literal(Integer(1)),
+                    false: Some(
+                        (17)Literal(Integer(0)),
+                    ),
+                }"#]],
+        );
+        check_parsing(
+            "1 * if (x>2) 3 || 4 else 5 || 6",
+            expect![[r#"
+                (1-31)Binary[Mul(3)](
+                    (1)Literal(Integer(1)),
+                    (5-31)If {
+                        cond: (9-11)Binary[Compare(Gt)(10)](
+                            (9)Ident("x"),
+                            (11)Literal(Integer(2)),
+                        ),
+                        true: (14-19)Binary[Or(16-17)](
+                            (14)Literal(Integer(3)),
+                            (19)Literal(Integer(4)),
+                        ),
+                        false: Some(
+                            (26-31)Binary[Or(28-29)](
+                                (26)Literal(Integer(5)),
+                                (31)Literal(Integer(6)),
+                            ),
+                        ),
+                    },
+                )"#]],
+        );
+        check_parsing(
+            "-if (a) 1 else 2",
+            expect![[r#"
+                (1-16)Unary[Neg(1)](
+                    (2-16)If {
+                        cond: (6)Ident("a"),
+                        true: (9)Literal(Integer(1)),
+                        false: Some(
+                            (16)Literal(Integer(2)),
+                        ),
+                    },
+                )"#]],
+        );
     }
 }
 

@@ -8,11 +8,16 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 ## Next Steps
 
-- Branching
-- Literals `true` and `false`.
-- Compiling `a && b` to `if (a) b else false` to get correct short-circuiting.
+- `()` type to allow `if` without `else`.
+- Compile `a && b` to `if (a) b else false` to get correct short-circuiting.
   - Note `&&` and `||` is not currently implemented for this reason.
+- Deflatten `KwIf` etc to `Kw(If)`.
+- Literals `true` and `false`.
+- Audit `.iter()` vs `.into_iter()`
+- `return` keyword as described in syntax.md.
+- `never` type to properly type "return"
 - Codemirror in the web preview, to underline errors.
+  - Ctrl-Enter to run code.
 - Figure how to type consequent parsing better. (macros?)
 - Compile portions of the code better (don't stop on the first err, allow for error nodes / IPs)
 - Better Symbol table handling (ugly inside `a35_mir` rn.)

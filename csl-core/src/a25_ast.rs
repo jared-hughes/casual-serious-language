@@ -142,6 +142,8 @@ pub enum ExprInner {
     FnCall(Box<Expr>, Vec<Expr>),
     /// Let assignment `let x = 3`
     Let(Span, Ident, Box<Expr>),
+    /// If expression `if (x > 0) 1 else 0`
+    If(Box<Expr>, Box<Expr>, Option<Box<Expr>>),
 }
 
 pub struct Expr {
@@ -201,6 +203,12 @@ impl fmt::Debug for ExprInner {
                 write!(f, "Let({span:?})[{ident}]")?;
                 f.debug_tuple("").field(init).finish()
             }
+            If(cond, true_branch, false_branch) => f
+                .debug_struct("If")
+                .field("cond", cond)
+                .field("true", true_branch)
+                .field("false", false_branch)
+                .finish(),
         }
     }
 }

@@ -4,6 +4,7 @@ use crate::mir::*;
 use crate::parser::parse;
 use crate::runtime_err::RuntimeErrorInner as RE;
 use crate::runtime_value::*;
+use crate::span::Span;
 use crate::span::DUMMY_SPAN;
 use index_vec::{index_vec, IndexVec};
 
@@ -30,42 +31,64 @@ impl<'prog> Interpreter<'prog> {
     }
 
     fn run_fn(&self, fn_name: &str, args: Vec<RuntimeValue>) -> RuntimeResult {
-        let block = self
+        let body = self
             .program
             .fns
             .get(fn_name)
             .ok_or_else(|| RE::MissingFunction(fn_name.to_string()).span(DUMMY_SPAN))?;
-        if block.params.len() != args.len() {
+        if body.params.len() != args.len() {
             Err(RE::IncorrectArgs(fn_name.to_string()).span(DUMMY_SPAN))?;
         }
-        let mut mem = index_vec![I64(0); block.len()];
-        for (i, inst) in block.iter().enumerate() {
-            if i < args.len() {
-                if args[i].to_type() != block.params[i] {
-                    Err(RE::IncorrectArgs(fn_name.to_string()).span(DUMMY_SPAN))?;
-                }
-                mem[i] = args[i];
-                continue;
+        let mut mem: IndexVec<IP, RuntimeValue> = index_vec![I64(0); body.num_locals()];
+        for (i, param_type) in body.params.iter().enumerate() {
+            if args[i].to_type() != *param_type {
+                Err(RE::IncorrectArgs(fn_name.to_string()).span(DUMMY_SPAN))?;
             }
-            mem[i] = self.eval(&mem, inst)?;
+            mem[i] = args[i];
         }
-        Ok(mem[block.get_return()])
+        let mut block = BP::from(0);
+        loop {
+            for inst in body.iter_stmts(block) {
+                match inst {
+                    Assign(ip, rval, sp) => {
+                        mem[*ip] = self.eval(&mem, rval, sp)?;
+                    }
+                }
+            }
+            let term = body.get_terminator(block);
+            match *term {
+                Unterminated => panic!("Unterminated block {block:?}."),
+                Return(ip) => return Ok(mem[ip]),
+                Goto { target } => block = target,
+                If {
+                    cond,
+                    true_branch,
+                    false_branch,
+                } => {
+                    block = match mem[cond] {
+                        Bool(true) => true_branch,
+                        Bool(false) => false_branch,
+                        _ => panic!("Invalid type in 'if' branch: '{}'.", mem[cond].to_type()),
+                    }
+                }
+            }
+        }
     }
 
-    fn eval(&self, mem: &Memory, inst: &Inst) -> RuntimeResult {
-        Ok(match inst.kind {
+    fn eval(&self, mem: &Memory, rval: &RValue, sp: &Span) -> RuntimeResult {
+        Ok(match *rval {
             Literal(Integer(x)) => I64(x),
             Literal(Float(x)) => F64(x),
             Unary(op, a_ip) => {
                 let a = mem[a_ip];
                 let info = op.get_intrinsic();
-                (info.compute)(a).map_err(|e| e.span(inst.span))?
+                (info.compute)(a).map_err(|e| e.span(*sp))?
             }
             Binary(op, a_ip, b_ip) => {
                 let a = mem[a_ip];
                 let b = mem[b_ip];
                 let info = op.get_intrinsic();
-                (info.compute)(a, b).map_err(|e| e.span(inst.span))?
+                (info.compute)(a, b).map_err(|e| e.span(*sp))?
             }
             FnCall(ref fun, ref arg_ips, _) => {
                 let mut args: Vec<RuntimeValue> = vec![];
@@ -74,7 +97,7 @@ impl<'prog> Interpreter<'prog> {
                 }
                 self.run_fn(&fun, args)?
             }
-            LoadArg(_) => panic!("LoadArg after parameter instructions"),
+            Use(ip, _) => mem[ip],
         })
     }
 }
@@ -159,6 +182,33 @@ mod interpret_expr_tests {
         check_interpret_mir("(0 > 0) == (1 > 0)", expect!["Bool(false)"]);
         check_interpret_mir("(0 > 0) != (1 > 0)", expect!["Bool(true)"]);
     }
+
+    #[test]
+    fn if_then() {
+        check_interpret_mir("if (1 > 0) 2 else 3", expect!["At 25-43: Expected function 'main' to return type 'bool', but it returned type 'i64'"]);
+        check_interpret_mir("if (0 > 0) 2 else 3", expect!["At 25-43: Expected function 'main' to return type 'bool', but it returned type 'i64'"]);
+    }
+}
+
+#[cfg(test)]
+mod interpret_expr_tests_hard {
+    use super::*;
+    use expect_test::{expect, Expect};
+
+    fn check_interpret_mir(ty: &str, input: &str, expect: Expect) {
+        let program = format!("fn main() -> {ty} {{ ret {input}; }}");
+        let actual = match compile_and_interpret(&program) {
+            Ok(mir) => format!("{:?}", mir),
+            Err(diag) => format!("{:#?}", diag),
+        };
+        expect.assert_eq(&actual)
+    }
+
+    #[test]
+    fn if_then() {
+        check_interpret_mir("i64", "if (1 > 0) 2 else 3", expect!["I64(2)"]);
+        check_interpret_mir("i64", "if (0 > 0) 2 else 3", expect!["I64(3)"]);
+    }
 }
 
 #[cfg(test)]
@@ -208,6 +258,32 @@ mod interpret_stmt_tests {
         check_interpret_mir(
             "fn main(x: i64) -> i64 { ret 1+2; }",
             expect!["At (!1,1!): Incorrect args to function 'main"],
+        );
+    }
+
+    #[test]
+    fn fibonacci_recursive() {
+        // Exponentially-recursive (since there is no cache)
+        check_interpret_mir(
+            "fn f(n: i64) -> i64 {
+                ret if (n == 0) 0
+                    else if (n == 1) 1
+                    else f(n-1) + f(n-2);
+            }
+            fn main() -> i64 { ret f(12); }",
+            expect!["I64(144)"],
+        );
+        // Tail-recursive form
+        check_interpret_mir(
+            "fn f(x: i64, y: i64, n: i64) -> i64 {
+                ret if (n == 0) y
+                    else f(y+x, x, n-1);
+            }
+            fn fib(n: i64) -> i64 {
+                ret f(1,0,n);
+            }
+            fn main() -> i64 { ret fib(12); }",
+            expect!["I64(144)"],
         );
     }
 }

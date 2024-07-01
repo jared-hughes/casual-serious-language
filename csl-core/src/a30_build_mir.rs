@@ -5,7 +5,7 @@ use crate::ast::*;
 use crate::build_mir_err::{self as ME, ArgCountWrong};
 use crate::errors::{Diag, Diagnostic};
 use crate::intrinsics::{OP1, OP2};
-use crate::mir::{self, BasicBlock, IP};
+use crate::mir::{self, FnBody, BP, IP};
 use crate::span::Span;
 use crate::symbol_table::SymbolTable;
 use crate::types::*;
@@ -92,7 +92,7 @@ impl TopCtx {
             };
             let name = fn_def.fn_name.name.clone();
             let ctx = Ctx::from_top(self);
-            let block = Ctx::build_bb_from_fn(&ctx, &fn_def)?;
+            let block = Ctx::build_body_from_fn(&ctx, &fn_def)?;
             if let Some(..) = self.mir_program.fns.get(&name) {
                 err(ME::DuplicateFnName {
                     span: fn_def.fn_name.span,
@@ -129,18 +129,19 @@ impl<'ctx> Ctx<'ctx> {
 
 /* Expr-level */
 impl<'ctx> Ctx<'ctx> {
-    fn build_bb_from_fn(
+    fn build_body_from_fn(
         pctx: &'ctx Ctx<'ctx>,
         fn_def: &FunctionDefinition,
-    ) -> Result<mir::BasicBlock, Diag> {
+    ) -> Result<mir::FnBody, Diag> {
         let mut ctx = pctx.child();
         let sig = ctx.top_ctx.cook_fn_signature(fn_def)?;
         let param_types = sig.param_types.iter().map(|x| x.param_type).collect();
-        let mut block = mir::BasicBlock::new(param_types);
+        let mut body = mir::FnBody::new(param_types);
+        let block = body.new_basic_block();
 
-        for p in sig.param_types {
+        for (i, p) in sig.param_types.into_iter().enumerate() {
             let name = p.name.name.to_string();
-            let ip = block.push(mir::LoadArg(p.param_type), p.name.span);
+            let ip = IP::from(i);
             if let Some(..) = ctx.symbol_table.get_symbol(&name) {
                 Err(ME::DuplicateParameter {
                     span: p.name.span,
@@ -152,13 +153,13 @@ impl<'ctx> Ctx<'ctx> {
         }
 
         if fn_def.body.len() == 0 {
-            err(ME::MissingRet {
+            err(ME::FnMissingRet {
                 span: fn_def.fn_name.span,
             })?;
         }
 
-        let (ip, ret_span) = ctx.extend_bb_with_stmts_ret(&mut block, &fn_def.body)?;
-        let return_type = block.get_type(ip);
+        let ((block, ip), ret_span) = ctx.add_stmts_ret(&mut body, block, &fn_def.body)?;
+        let return_type = body.get_type(ip);
         if return_type != sig.return_type {
             err(ME::WrongReturnType {
                 span: ret_span,
@@ -167,29 +168,33 @@ impl<'ctx> Ctx<'ctx> {
                 expected: sig.return_type,
             })?
         }
+        body.set_terminator(block, mir::Return(ip));
 
-        Ok(block)
+        Ok(body)
     }
 
     /// Precondition: stmts is nonempty.
     /// Caller should give an appropriate error message when `stmts.len() == 0`.
     /// Returns a tuple (ip, span of returning expr).
-    fn extend_bb_with_stmts_ret(
+    fn add_stmts_ret(
         &mut self,
-        block: &mut BasicBlock,
+        body: &mut FnBody,
+        block: BP,
         stmts: &Vec<Expr>,
-    ) -> Result<(IP, Span), Diag> {
+    ) -> Result<((BP, IP), Span), Diag> {
+        assert!(stmts.len() > 0);
+        let mut block = block;
         for (i, stmt) in (&stmts).into_iter().enumerate() {
             if i == stmts.len() - 1 {
                 if let Ret(_, expr) = &stmt.body {
-                    let ip = self.add_expr(block, &expr)?;
-                    block.set_return(ip);
-                    return Ok((ip, expr.span));
+                    let (block, ip) = self.add_expr(body, block, &expr)?;
+                    return Ok(((block, ip), expr.span));
                 } else {
-                    return err(ME::MissingRet { span: stmt.span });
+                    return err(ME::FnMissingRet { span: stmt.span });
                 }
             }
             match &stmt.body {
+                // TODO: Move Let and Ret special cases out of here, and make it return "never";
                 Ret(..) => return err(ME::MisplacedRet { span: stmt.span }),
                 Let(_, ident, expr) => {
                     if let Some(..) = self.symbol_table.get_symbol(&ident.name) {
@@ -199,21 +204,28 @@ impl<'ctx> Ctx<'ctx> {
                         }
                         .into_diag());
                     }
-                    let ip = self.add_expr(block, &expr)?;
+                    let (block1, ip) = self.add_expr(body, block, &expr)?;
+                    block = block1;
                     self.symbol_table.set_symbol(ident.name.to_string(), ip);
                 }
                 _ => {
-                    // Dead code
+                    todo!("Add dead code to MIR to get type checking.")
                 }
             }
         }
         unreachable!();
     }
 
-    fn add_expr(&self, block: &mut BasicBlock, ex: &Expr) -> Result<IP, Diag> {
+    /// Returns (BP, IP).
+    /// The BP tells you where control flow is at, after executing this expr.
+    /// The IP tells you where is the return value of this expr.
+    fn add_expr(&self, body: &mut FnBody, block: BP, ex: &Expr) -> Result<(BP, IP), Diag> {
         Ok(match &ex.body {
-            Paren(arg) => self.add_expr(block, arg)?,
-            Literal(lit) => block.push(mir::Literal(*lit), ex.span),
+            Paren(arg) => return self.add_expr(body, block, arg),
+            Literal(lit) => (
+                block,
+                body.push_assign_new_ip(block, mir::Literal(*lit), ex.span),
+            ),
             IdentExpr(x) => {
                 let Some(ip) = self.symbol_table.get_symbol(x) else {
                     err(ME::IdentifierNotFound {
@@ -221,16 +233,16 @@ impl<'ctx> Ctx<'ctx> {
                         name: x.to_string(),
                     })?
                 };
-                ip
+                (block, ip)
             }
             Unary(op, arg_node) => {
-                let arg = self.add_expr(block, &arg_node)?;
-                block.add_unary(*op, arg)?
+                let (block, arg) = self.add_expr(body, block, &arg_node)?;
+                (block, body.add_unary(block, *op, arg)?)
             }
             Binary(op, left_node, right_node) => {
-                let left = self.add_expr(block, &left_node)?;
-                let right = self.add_expr(block, &right_node)?;
-                block.add_binary(*op, left, right)?
+                let (block, left) = self.add_expr(body, block, &left_node)?;
+                let (block, right) = self.add_expr(body, block, &right_node)?;
+                (block, body.add_binary(block, *op, left, right)?)
             }
             FnDefinition(fn_def) => err(ME::FnInExpr {
                 span: fn_def.fn_name.span,
@@ -239,8 +251,11 @@ impl<'ctx> Ctx<'ctx> {
             Let(span, ..) => return err(ME::MisplacedLet { span: *span }),
             Block(stmts) => {
                 let mut child_ctx = self.child();
-                let (ip, ..) = child_ctx.extend_bb_with_stmts_ret(block, stmts)?;
-                ip
+                if stmts.len() == 0 {
+                    err(ME::BlockMissingRet { span: ex.span })?;
+                }
+                let ((block, ip), _sp) = child_ctx.add_stmts_ret(body, block, stmts)?;
+                (block, ip)
             }
             FnCall(fun, arg_nodes) => {
                 let IdentExpr(fn_name) = &fun.body else {
@@ -263,9 +278,11 @@ impl<'ctx> Ctx<'ctx> {
                     ))?
                 }
                 let mut args = vec![];
+                let mut block = block;
                 for (arg_node, param) in zip(arg_nodes, &sig.param_types) {
-                    let ip = self.add_expr(block, arg_node)?;
-                    let arg_type = block.get_type(ip);
+                    let (block1, ip) = self.add_expr(body, block, arg_node)?;
+                    block = block1;
+                    let arg_type = body.get_type(ip);
                     if arg_type != param.param_type {
                         err(ME::WrongArgType {
                             span: ex.span,
@@ -276,17 +293,74 @@ impl<'ctx> Ctx<'ctx> {
                     }
                     args.push(ip);
                 }
-                block.push(
+                let ip = body.push_assign_new_ip(
+                    block,
                     mir::FnCall(fn_name.to_string(), args, sig.return_type),
                     ex.span,
-                )
+                );
+                (block, ip)
+            }
+            If(cond_node, if_node, else_node) => {
+                let (block, cond_ip) = self.add_expr(body, block, &cond_node)?;
+                {
+                    let cond_type = body.get_type(cond_ip);
+                    if cond_type != Bool {
+                        err(ME::WrongIfConditionType {
+                            span: cond_node.span,
+                            cond_type,
+                        })?;
+                    }
+                }
+                // Setup diamond shape
+                let if_block = body.new_basic_block();
+                let else_block = body.new_basic_block();
+                body.set_terminator(
+                    block,
+                    mir::If {
+                        cond: cond_ip,
+                        true_branch: if_block,
+                        false_branch: else_block,
+                    },
+                );
+                // Add branches
+                let (if_block, if_ip) = self.add_expr(body, if_block, &if_node)?;
+                let Some(else_node) = else_node else {
+                    todo!();
+                };
+                let (else_block, else_ip) = self.add_expr(body, else_block, &else_node)?;
+                let out_block = body.new_basic_block();
+                let value_type = {
+                    let if_type = body.get_type(if_ip);
+                    let else_type = body.get_type(else_ip);
+                    if if_type != else_type {
+                        err(ME::WrongElseType {
+                            span: else_node.span,
+                            if_type,
+                            else_type,
+                        })?;
+                    }
+                    if_type
+                };
+                // Reconstruct value back to output branch
+                let out_val = body.push_local(value_type);
+                body.push(
+                    if_block,
+                    mir::Assign(out_val, mir::Use(if_ip, value_type), if_node.span),
+                );
+                body.push(
+                    else_block,
+                    mir::Assign(out_val, mir::Use(else_ip, value_type), if_node.span),
+                );
+                body.set_terminator(if_block, mir::Goto { target: out_block });
+                body.set_terminator(else_block, mir::Goto { target: out_block });
+                (out_block, out_val)
             }
         })
     }
 }
 
-impl BasicBlock {
-    fn add_unary(&mut self, op: UnaryOp, arg: IP) -> Result<IP, Diag> {
+impl FnBody {
+    fn add_unary(&mut self, block: BP, op: UnaryOp, arg: IP) -> Result<IP, Diag> {
         let arg_type = self.get_type(arg);
         let op1 = match (op.node, arg_type) {
             (Neg, I64) => OP1::NegI64,
@@ -298,10 +372,10 @@ impl BasicBlock {
                 arg_type,
             })?,
         };
-        return Ok(self.push(mir::Unary(op1, arg), op.span));
+        return Ok(self.push_assign_new_ip(block, mir::Unary(op1, arg), op.span));
     }
 
-    fn add_binary(&mut self, op: BinOp, left: IP, right: IP) -> Result<IP, Diag> {
+    fn add_binary(&mut self, block: BP, op: BinOp, left: IP, right: IP) -> Result<IP, Diag> {
         let left_type = self.get_type(left);
         let right_type = self.get_type(right);
         let op2 = match (op.node, left_type, right_type) {
@@ -342,7 +416,7 @@ impl BasicBlock {
                 right_type,
             })?,
         };
-        return Ok(self.push(mir::Binary(op2, left, right), op.span));
+        return Ok(self.push_assign_new_ip(block, mir::Binary(op2, left, right), op.span));
     }
 }
 
@@ -352,7 +426,7 @@ mod build_mir_expr_block {
     use crate::parser::parse;
     use expect_test::{expect, Expect};
 
-    fn mir_from_string(input: &str) -> Result<BasicBlock, Diag> {
+    fn mir_from_string(input: &str) -> Result<FnBody, Diag> {
         let ast_program = parse(input)?;
         let mut mir_program = ast_to_mir(&ast_program)?;
         let f_block = mir_program
@@ -384,94 +458,116 @@ mod build_mir_expr_block {
         check_build_mir(
             "1.0 + 2.0",
             expect![[r#"
-                BasicBlock
-                   0: f64 Literal(Float(1.0))
-                   1: f64 Literal(Float(2.0))
-                   2: f64 Binary(AddF64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Float(1.0))
+                  IP(1) = Literal(Float(2.0))
+                  IP(2) = Binary(AddF64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1 + 2",
             expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(1))
-                   1: i64 Literal(Integer(2))
-                   2: i64 Binary(AddI64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(AddI64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1.0 - 2.0",
             expect![[r#"
-                BasicBlock
-                   0: f64 Literal(Float(1.0))
-                   1: f64 Literal(Float(2.0))
-                   2: f64 Binary(SubF64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Float(1.0))
+                  IP(1) = Literal(Float(2.0))
+                  IP(2) = Binary(SubF64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1 - 2",
             expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(1))
-                   1: i64 Literal(Integer(2))
-                   2: i64 Binary(SubI64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(SubI64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1.0 * 2.0",
             expect![[r#"
-                BasicBlock
-                   0: f64 Literal(Float(1.0))
-                   1: f64 Literal(Float(2.0))
-                   2: f64 Binary(MulF64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Float(1.0))
+                  IP(1) = Literal(Float(2.0))
+                  IP(2) = Binary(MulF64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1 * 2",
             expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(1))
-                   1: i64 Literal(Integer(2))
-                   2: i64 Binary(MulI64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(MulI64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1.0 / 2.0",
             expect![[r#"
-                BasicBlock
-                   0: f64 Literal(Float(1.0))
-                   1: f64 Literal(Float(2.0))
-                   2: f64 Binary(DivF64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Float(1.0))
+                  IP(1) = Literal(Float(2.0))
+                  IP(2) = Binary(DivF64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1 / 2",
             expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(1))
-                   1: i64 Literal(Integer(2))
-                   2: i64 Binary(DivI64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(DivI64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1 < 2",
             expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(1))
-                   1: i64 Literal(Integer(2))
-                   2: bool Binary(LtI64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(LtI64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "1.0 < 2.0",
             expect![[r#"
-                BasicBlock
-                   0: f64 Literal(Float(1.0))
-                   1: f64 Literal(Float(2.0))
-                   2: bool Binary(LtF64, IP(0), IP(1))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Float(1.0))
+                  IP(1) = Literal(Float(2.0))
+                  IP(2) = Binary(LtF64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "(1>0) <= (2.0>1.0)",
             expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(1))
-                   1: i64 Literal(Integer(0))
-                   2: bool Binary(GtI64, IP(0), IP(1))
-                   3: f64 Literal(Float(2.0))
-                   4: f64 Literal(Float(1.0))
-                   5: bool Binary(GtF64, IP(3), IP(4))
-                   6: bool Binary(LtEqBool, IP(2), IP(5))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(0))
+                  IP(2) = Binary(GtI64, IP(0), IP(1))
+                  IP(3) = Literal(Float(2.0))
+                  IP(4) = Literal(Float(1.0))
+                  IP(5) = Binary(GtF64, IP(3), IP(4))
+                  IP(6) = Binary(LtEqBool, IP(2), IP(5))
+                  Return(IP(6))
+            "#]],
         );
     }
 
@@ -531,27 +627,39 @@ mod build_mir_expr_block {
         check_build_mir(
             "1 + { ret 2+3; } + 4",
             expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(1))
-                   1: i64 Literal(Integer(2))
-                   2: i64 Literal(Integer(3))
-                   3: i64 Binary(AddI64, IP(1), IP(2))
-                   4: i64 Binary(AddI64, IP(0), IP(3))
-                   5: i64 Literal(Integer(4))
-                   6: i64 Binary(AddI64, IP(4), IP(5))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Literal(Integer(3))
+                  IP(3) = Binary(AddI64, IP(1), IP(2))
+                  IP(4) = Binary(AddI64, IP(0), IP(3))
+                  IP(5) = Literal(Integer(4))
+                  IP(6) = Binary(AddI64, IP(4), IP(5))
+                  Return(IP(6))
+            "#]],
         );
 
         check_build_mir(
             "{ let x=1; ret x*2; } + {let x=3; ret x*4;}",
             expect![[r#"
-                BasicBlock
-                   0: i64 Literal(Integer(1))
-                   1: i64 Literal(Integer(2))
-                   2: i64 Binary(MulI64, IP(0), IP(1))
-                   3: i64 Literal(Integer(3))
-                   4: i64 Literal(Integer(4))
-                   5: i64 Binary(MulI64, IP(3), IP(4))
-                   6: i64 Binary(AddI64, IP(2), IP(5))"#]],
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(1))
+                  IP(1) = Literal(Integer(2))
+                  IP(2) = Binary(MulI64, IP(0), IP(1))
+                  IP(3) = Literal(Integer(3))
+                  IP(4) = Literal(Integer(4))
+                  IP(5) = Binary(MulI64, IP(3), IP(4))
+                  IP(6) = Binary(AddI64, IP(2), IP(5))
+                  Return(IP(6))
+            "#]],
+        );
+    }
+
+    #[test]
+    fn empty_block() {
+        check_build_mir(
+            "1 + { }",
+            expect!["At 25-27: Unit type '()' has not yet been implemented, so all blocks must have a return. Try adding 'ret'."],
         );
     }
 
@@ -561,6 +669,82 @@ mod build_mir_expr_block {
             "{ let x=1; ret {let x=3; ret x*4;};}",
             expect!["At 41: Cannot redefine 'x' since it is already defined."],
         );
+    }
+}
+
+#[cfg(test)]
+mod build_mir_expr_hard {
+    use super::*;
+    use crate::parser::parse;
+    use expect_test::{expect, Expect};
+
+    fn mir_from_string(input: &str) -> Result<FnBody, Diag> {
+        let ast_program = parse(input)?;
+        let mut mir_program = ast_to_mir(&ast_program)?;
+        let f_block = mir_program
+            .fns
+            .remove("f")
+            .ok_or_else(|| panic!("No function f defined."))?;
+        Ok(f_block)
+    }
+
+    fn check_build_mir(ty: &str, input: &str, expect: Expect) {
+        let program = format!("fn f() -> {ty} {{ ret {input}; }}");
+        let actual = match mir_from_string(&program) {
+            Ok(mir) => format!("{:#?}", mir),
+            Err(err) => format!("{:#?}", err),
+        };
+        expect.assert_eq(&actual)
+    }
+
+    #[test]
+    fn if_else() {
+        check_build_mir(
+            "i64",
+            "if(2>1) 3 else 4",
+            expect![[r#"
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(2))
+                  IP(1) = Literal(Integer(1))
+                  IP(2) = Binary(GtI64, IP(0), IP(1))
+                  If { cond: IP(2), true_branch: BP(1), false_branch: BP(2) }
+
+                BP(1): BasicBlock
+                  IP(3) = Literal(Integer(3))
+                  IP(5) = Use(IP(3), I64)
+                  Goto { target: BP(3) }
+
+                BP(2): BasicBlock
+                  IP(4) = Literal(Integer(4))
+                  IP(5) = Use(IP(4), I64)
+                  Goto { target: BP(3) }
+
+                BP(3): BasicBlock
+                  Return(IP(5))
+            "#]],
+        );
+    }
+
+    #[test]
+    fn if_else_errors() {
+        check_build_mir(
+            "i64",
+            "if(2>1) 3 else 4.0",
+            expect!["At 36-38: Expected else branch to return type 'i64' (the same type as the 'if' branch), but the else branch returned type 'f64'."],
+        );
+        check_build_mir(
+            "i64",
+            "if(2) 3 else 4.0",
+            expect!["At 24: Expected 'if' to branch on a boolean ('Bool') but got type 'i64'."],
+        );
+        // TODO-unit-type: Handle no else branch
+        // check_build_mir(
+        //     "i64",
+        //     "if(2>1) 3",
+        //     expect![[r#"
+        //         TODO
+        //     "#]],
+        // );
     }
 }
 
@@ -588,10 +772,12 @@ mod build_mir_functions {
         check_build_mir(
             "fn f(x: i64) -> i64 { ret x + 1; } ",
             expect![[r#"
-                fn f BasicBlock
-                   0: i64 LoadArg(I64)
-                   1: i64 Literal(Integer(1))
-                   2: i64 Binary(AddI64, IP(0), IP(1))"#]],
+                fn f:
+                BP(0): BasicBlock
+                  IP(1) = Literal(Integer(1))
+                  IP(2) = Binary(AddI64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
     }
 
@@ -611,16 +797,22 @@ mod build_mir_functions {
             "fn f() -> i64 { ret 12*3+8/4; }
             fn main() -> i64 { ret f(); }",
             expect![[r#"
-                fn f BasicBlock
-                   0: i64 Literal(Integer(12))
-                   1: i64 Literal(Integer(3))
-                   2: i64 Binary(MulI64, IP(0), IP(1))
-                   3: i64 Literal(Integer(8))
-                   4: i64 Literal(Integer(4))
-                   5: i64 Binary(DivI64, IP(3), IP(4))
-                   6: i64 Binary(AddI64, IP(2), IP(5))
-                fn main BasicBlock
-                   0: i64 FnCall("f", [], I64)"#]],
+                fn f:
+                BP(0): BasicBlock
+                  IP(0) = Literal(Integer(12))
+                  IP(1) = Literal(Integer(3))
+                  IP(2) = Binary(MulI64, IP(0), IP(1))
+                  IP(3) = Literal(Integer(8))
+                  IP(4) = Literal(Integer(4))
+                  IP(5) = Binary(DivI64, IP(3), IP(4))
+                  IP(6) = Binary(AddI64, IP(2), IP(5))
+                  Return(IP(6))
+
+                fn main:
+                BP(0): BasicBlock
+                  IP(0) = FnCall("f", [], I64)
+                  Return(IP(0))
+            "#]],
         );
     }
 
@@ -629,39 +821,48 @@ mod build_mir_functions {
         check_build_mir(
             "fn f(x: i64) -> i64 { ret x*3; }",
             expect![[r#"
-                fn f BasicBlock
-                   0: i64 LoadArg(I64)
-                   1: i64 Literal(Integer(3))
-                   2: i64 Binary(MulI64, IP(0), IP(1))"#]],
+                fn f:
+                BP(0): BasicBlock
+                  IP(1) = Literal(Integer(3))
+                  IP(2) = Binary(MulI64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
         );
         check_build_mir(
             "fn f(y: i64, x: i64) -> i64 { ret (x/y)+(y/x); }",
             expect![[r#"
-                fn f BasicBlock
-                   0: i64 LoadArg(I64)
-                   1: i64 LoadArg(I64)
-                   2: i64 Binary(DivI64, IP(1), IP(0))
-                   3: i64 Binary(DivI64, IP(0), IP(1))
-                   4: i64 Binary(AddI64, IP(2), IP(3))"#]],
+                fn f:
+                BP(0): BasicBlock
+                  IP(2) = Binary(DivI64, IP(1), IP(0))
+                  IP(3) = Binary(DivI64, IP(0), IP(1))
+                  IP(4) = Binary(AddI64, IP(2), IP(3))
+                  Return(IP(4))
+            "#]],
         );
         check_build_mir(
             "fn f(f: i64) -> i64 { ret f; };",
             expect![[r#"
-                fn f BasicBlock
-                   0: i64 LoadArg(I64)"#]],
+                fn f:
+                BP(0): BasicBlock
+                  Return(IP(0))
+            "#]],
         );
         check_build_mir(
             "fn add(x: f64, y: f64) -> f64 { ret x+y; }\
             fn main() -> f64 { ret add(3.0, 5.0); }",
             expect![[r#"
-                fn add BasicBlock
-                   0: f64 LoadArg(F64)
-                   1: f64 LoadArg(F64)
-                   2: f64 Binary(AddF64, IP(0), IP(1))
-                fn main BasicBlock
-                   0: f64 Literal(Float(3.0))
-                   1: f64 Literal(Float(5.0))
-                   2: f64 FnCall("add", [IP(0), IP(1)], F64)"#]],
+                fn add:
+                BP(0): BasicBlock
+                  IP(2) = Binary(AddF64, IP(0), IP(1))
+                  Return(IP(2))
+
+                fn main:
+                BP(0): BasicBlock
+                  IP(0) = Literal(Float(3.0))
+                  IP(1) = Literal(Float(5.0))
+                  IP(2) = FnCall("add", [IP(0), IP(1)], F64)
+                  Return(IP(2))
+            "#]],
         )
     }
 
@@ -763,12 +964,13 @@ mod build_mir_functions {
                 ret xx + yy;\
             }",
             expect![[r#"
-                fn sumSq BasicBlock
-                   0: f64 LoadArg(F64)
-                   1: f64 LoadArg(F64)
-                   2: f64 Binary(MulF64, IP(0), IP(0))
-                   3: f64 Binary(MulF64, IP(1), IP(1))
-                   4: f64 Binary(AddF64, IP(2), IP(3))"#]],
+                fn sumSq:
+                BP(0): BasicBlock
+                  IP(2) = Binary(MulF64, IP(0), IP(0))
+                  IP(3) = Binary(MulF64, IP(1), IP(1))
+                  IP(4) = Binary(AddF64, IP(2), IP(3))
+                  Return(IP(4))
+            "#]],
         );
         check_build_mir(
             "fn pow16(x: f64) -> f64 {\
@@ -777,11 +979,64 @@ mod build_mir_functions {
                 ret x4 * x4;\
             }",
             expect![[r#"
-                fn pow16 BasicBlock
-                   0: f64 LoadArg(F64)
-                   1: f64 Binary(MulF64, IP(0), IP(0))
-                   2: f64 Binary(MulF64, IP(1), IP(1))
-                   3: f64 Binary(MulF64, IP(2), IP(2))"#]],
+                fn pow16:
+                BP(0): BasicBlock
+                  IP(1) = Binary(MulF64, IP(0), IP(0))
+                  IP(2) = Binary(MulF64, IP(1), IP(1))
+                  IP(3) = Binary(MulF64, IP(2), IP(2))
+                  Return(IP(3))
+            "#]],
+        );
+    }
+
+    #[test]
+    fn fibonacci_recursive() {
+        check_build_mir(
+            "fn f(x: i64) -> i64 {
+                ret if (x == 0) 0
+                    else if (x == 1) 1
+                    else f(x-1) + f(x-2);
+            }",
+            expect![[r#"
+                fn f:
+                BP(0): BasicBlock
+                  IP(1) = Literal(Integer(0))
+                  IP(2) = Binary(EqI64, IP(0), IP(1))
+                  If { cond: IP(2), true_branch: BP(1), false_branch: BP(2) }
+
+                BP(1): BasicBlock
+                  IP(3) = Literal(Integer(0))
+                  IP(15) = Use(IP(3), I64)
+                  Goto { target: BP(6) }
+
+                BP(2): BasicBlock
+                  IP(4) = Literal(Integer(1))
+                  IP(5) = Binary(EqI64, IP(0), IP(4))
+                  If { cond: IP(5), true_branch: BP(3), false_branch: BP(4) }
+
+                BP(3): BasicBlock
+                  IP(6) = Literal(Integer(1))
+                  IP(14) = Use(IP(6), I64)
+                  Goto { target: BP(5) }
+
+                BP(4): BasicBlock
+                  IP(7) = Literal(Integer(1))
+                  IP(8) = Binary(SubI64, IP(0), IP(7))
+                  IP(9) = FnCall("f", [IP(8)], I64)
+                  IP(10) = Literal(Integer(2))
+                  IP(11) = Binary(SubI64, IP(0), IP(10))
+                  IP(12) = FnCall("f", [IP(11)], I64)
+                  IP(13) = Binary(AddI64, IP(9), IP(12))
+                  IP(14) = Use(IP(13), I64)
+                  Goto { target: BP(5) }
+
+                BP(5): BasicBlock
+                  IP(15) = Use(IP(14), I64)
+                  Goto { target: BP(6) }
+
+                BP(6): BasicBlock
+                  Return(IP(15))
+            "#]],
         );
     }
 

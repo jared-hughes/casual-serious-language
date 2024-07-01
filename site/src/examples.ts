@@ -53,6 +53,28 @@ const _examples: Example[] = [
       ret funny_polynomial(2.0);
     }`,
   },
+  {
+    name: "fibonacci (slow)",
+    source: `fn fib(n: i64) -> i64 {
+      ret if (n == 0) 0
+          else if (n == 1) 1
+          else fib(n-1) + fib(n-2);
+    }
+    fn main() -> i64 {
+      ret fib(12);
+    }`,
+  },
+  {
+    name: "fibonacci (fast)",
+    source: `fn f(x: i64, y: i64, n: i64) -> i64 {
+      ret if (n == 0) y
+          else f(y+x, x, n-1);
+    }
+    fn fib(n: i64) -> i64 {
+      ret f(1,0,n);
+    }
+    fn main() -> i64 { ret fib(50); }`,
+  },
 ];
 
 export const examples: Example[] = _examples.map((ex) => ({

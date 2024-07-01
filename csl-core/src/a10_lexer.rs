@@ -230,6 +230,8 @@ impl<'a> RawLexer<'a> {
             () if s == "fn" => KwFn,
             () if s == "ret" => KwRet,
             () if s == "let" => KwLet,
+            () if s == "if" => KwIf,
+            () if s == "else" => KwElse,
             _ => Ident(s),
         }
     }
@@ -502,11 +504,13 @@ mod lexer_tests {
     #[test]
     fn keywords() {
         check_lexing(
-            "fn ret let",
+            "fn ret let if else",
             expect![[r#"
                 KwFn [len=2]
                 KwRet [len=3]
                 KwLet [len=3]
+                KwIf [len=2]
+                KwElse [len=4]
             "#]],
         );
     }

@@ -80,6 +80,10 @@ pub enum TokenKind<'a> {
     KwRet,
     /// 'let'
     KwLet,
+    /// 'if'
+    KwIf,
+    /// 'else'
+    KwElse,
 
     /* Atoms */
     /// Literal number
