@@ -173,7 +173,7 @@ impl fmt::Debug for ExprInner {
             IdentExpr(x) => write!(f, "Ident({x:?})"),
             FnDefinition(def) => {
                 write!(f, "FnDefinition[{}](", def.fn_name)?;
-                for (i, p) in (&def.params).into_iter().enumerate() {
+                for (i, p) in def.params.iter().enumerate() {
                     write!(f, "{}: {}", p.name, p.param_type)?;
                     if i < def.params.len() - 1 {
                         write!(f, ", ")?;

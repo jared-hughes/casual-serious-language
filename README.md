@@ -8,8 +8,6 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 ## Next Steps
 
-- Audit `.iter()` vs `.into_iter()`
-  - Clippy.
 - Allow typing `()` as return type of functions.
 - Allow type hints on variables.
 - Put `body` in `ctx`.
@@ -48,6 +46,8 @@ The WIP is so far from these actually being relevant:
 1. Pointer graph must be a DAG (to make the GC easier, or just for fun). However, cycles are useful (such as passing messages to a main controller), so certain structs can choose to be "owned", preventing more than one reference to them from existing. This allows them to reference their owner via a `WeakRef` that is always valid. If the owner is deleted, the object is deleted.
 
 ## Development
+
+We use `clippy` for linting. Run `cargo clippy` or set up your editor to use clippy. The repository includes a `.vscode` that configures rust-analyzer to use clippy.
 
 To run all tests and take snapshots of what changed:
 

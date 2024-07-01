@@ -4,7 +4,13 @@ use crate::mir::IP;
 
 pub struct SymbolTable<'ctx> {
     map: HashMap<String, IP>,
-    parent: Option<Box<&'ctx SymbolTable<'ctx>>>,
+    parent: Option<&'ctx SymbolTable<'ctx>>,
+}
+
+impl<'ctx> Default for SymbolTable<'ctx> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<'ctx> SymbolTable<'ctx> {
@@ -16,7 +22,7 @@ impl<'ctx> SymbolTable<'ctx> {
     pub fn get_symbol(&self, symb: &str) -> Option<IP> {
         if let Some(ip) = self.map.get(symb).cloned() {
             // TODO: IP should derive Copy.
-            return Some(ip.clone());
+            return Some(ip);
         }
         if let Some(p) = &self.parent {
             return p.get_symbol(symb);
@@ -24,7 +30,7 @@ impl<'ctx> SymbolTable<'ctx> {
         None
     }
 
-    fn new_with_parent(parent: Option<Box<&'ctx SymbolTable<'ctx>>>) -> Self {
+    fn new_with_parent(parent: Option<&'ctx SymbolTable<'ctx>>) -> Self {
         Self {
             map: HashMap::new(),
             parent,
@@ -36,6 +42,6 @@ impl<'ctx> SymbolTable<'ctx> {
     }
 
     pub fn child(&'ctx self) -> Self {
-        Self::new_with_parent(Some(Box::new(self)))
+        Self::new_with_parent(Some(self))
     }
 }

@@ -2,7 +2,6 @@ use crate::span::Span;
 use std::fmt;
 
 pub trait Diagnostic {
-    #[must_use]
     fn into_diag(self) -> Diag;
 }
 

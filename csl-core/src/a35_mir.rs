@@ -45,6 +45,12 @@ pub struct Program {
     pub fns: HashMap<String, FnBody>,
 }
 
+impl Default for Program {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Program {
     pub fn new() -> Program {
         Program {
@@ -57,11 +63,11 @@ impl fmt::Debug for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut fns = self.fns.iter().collect::<Vec<_>>();
         fns.sort_by_key(|x| x.0);
-        for (i, (fn_name, fn_block)) in fns.into_iter().enumerate() {
+        for (i, (fn_name, fn_block)) in fns.iter().enumerate() {
             writeln!(f, "fn {fn_name}:")?;
             write!(f, "{fn_block:#?}")?;
             if i != self.fns.len() - 1 {
-                writeln!(f, "")?;
+                writeln!(f)?;
             }
         }
         Ok(())
@@ -95,11 +101,11 @@ impl FnBody {
         let ind = self.blocks.len();
         let block = BP::from_usize(ind);
         self.blocks.push(BasicBlockData::new());
-        return block;
+        block
     }
 
     pub fn get_type(&self, ip: IP) -> Type {
-        return self.types[ip];
+        self.types[ip]
     }
 
     /// Create a new IP (local var) and assign to it.
@@ -108,7 +114,7 @@ impl FnBody {
         let value_type = self.compute_type(&inst);
         let ip = self.push_local(value_type);
         self.blocks[block].stmts.push(Assign(ip, inst, span));
-        return ip;
+        ip
     }
 
     pub fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {
@@ -120,7 +126,7 @@ impl FnBody {
         let ind = self.types.len();
         let ip = IP::from_usize(ind);
         self.types.push(value_type);
-        return ip;
+        ip
     }
 
     pub fn num_locals(&self) -> usize {
@@ -190,11 +196,11 @@ impl FnBody {
 
 impl fmt::Debug for FnBody {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (i, block) in self.blocks.clone().into_iter().enumerate() {
+        for (i, block) in self.blocks.iter().enumerate() {
             write!(f, "{:?}: ", BP::from(i))?;
             write!(f, "{:?}", block)?;
             if i != self.blocks.len() - 1 {
-                writeln!(f, "")?;
+                writeln!(f)?;
             }
         }
         Ok(())

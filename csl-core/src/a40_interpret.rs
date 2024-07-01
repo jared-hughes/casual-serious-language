@@ -27,7 +27,7 @@ type Memory = IndexVec<IP, RuntimeValue>;
 impl<'prog> Interpreter<'prog> {
     pub fn interpret(program: &'prog Program) -> RuntimeResult {
         let interpreter = Interpreter { program };
-        interpreter.run_fn(&"main", vec![])
+        interpreter.run_fn("main", vec![])
     }
 
     fn run_fn(&self, fn_name: &str, args: Vec<RuntimeValue>) -> RuntimeResult {
@@ -96,7 +96,7 @@ impl<'prog> Interpreter<'prog> {
                 for a in arg_ips {
                     args.push(mem[*a]);
                 }
-                self.run_fn(&fun, args)?
+                self.run_fn(fun, args)?
             }
             Use(ip, _) => mem[ip],
         })
@@ -109,12 +109,12 @@ mod interpret_expr_tests {
     use expect_test::{expect, Expect};
 
     fn check_interpret_mir(input: &str, expect: Expect) {
-        let program = if !input.contains("{") {
+        let program = if !input.contains('{') {
             let ty = match () {
-                () if input.contains("<") => "bool",
-                () if input.contains(">") => "bool",
-                () if input.contains("=") => "bool",
-                () if input.contains(".") => "f64",
+                () if input.contains('<') => "bool",
+                () if input.contains('>') => "bool",
+                () if input.contains('=') => "bool",
+                () if input.contains('.') => "f64",
                 () => "i64",
             };
             format!("fn main() -> {ty} {{ ret {input}; }}")
@@ -218,7 +218,7 @@ mod interpret_stmt_tests {
     use expect_test::{expect, Expect};
 
     fn check_interpret_mir(input: &str, expect: Expect) {
-        let actual = match compile_and_interpret(&input) {
+        let actual = match compile_and_interpret(input) {
             Ok(mir) => format!("{:?}", mir),
             Err(diag) => format!("{:#?}", diag),
         };

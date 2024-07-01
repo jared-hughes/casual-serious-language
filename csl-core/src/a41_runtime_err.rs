@@ -68,9 +68,9 @@ impl Diagnostic for RuntimeError {
                 format!("Incorrect args to function '{name}")
             }
         };
-        return Diag {
+        Diag {
             span: self.span,
             message,
-        };
+        }
     }
 }

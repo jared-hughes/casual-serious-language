@@ -84,7 +84,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn preprocess<'a>(tok: Token<'a>) -> Result<Token<'a>, Diag> {
+fn preprocess(tok: Token<'_>) -> Result<Token<'_>, Diag> {
     match tok.kind {
         Invalid(x) => err(PE::InvalidToken { token: x }.span(tok.span)),
         _ => Ok(tok),
@@ -115,6 +115,7 @@ macro_rules! consume_ident {
 }
 
 fn needs_semi(ex: &ast::ExprInner) -> bool {
+    #[allow(clippy::match_like_matches_macro)]
     match ex {
         ast::ExprInner::FnDefinition(_) => false,
         _ => true,
@@ -125,7 +126,7 @@ fn needs_semi(ex: &ast::ExprInner) -> bool {
 impl<'a> Parser<'a> {
     fn parse_program(&mut self) -> ProgramResult {
         let body = self.parse_stmts()?;
-        return Ok(ast::Program { body });
+        Ok(ast::Program { body })
     }
 
     /// Parse statements until a '}' or EOF.
@@ -202,9 +203,7 @@ impl<'a> Parser<'a> {
                 let s = span(start.span.lo, inner.span.hi);
                 Ok(expr(ast::Ret(start.span, inner), s))
             }
-            BinOp(Plus) => {
-                return err(PE::UnaryPlusDisallowed.span(start.span));
-            }
+            BinOp(Plus) => err(PE::UnaryPlusDisallowed.span(start.span)),
             BinOp(Minus) => {
                 let inner = self.parse_main(BindingPower::Prefix)?;
                 let unop = respan(ast::UnaryOpKind::Neg, start.span);
@@ -276,7 +275,7 @@ impl<'a> Parser<'a> {
         }
         let binop = respan(translate_binop(tok), sp);
         let s = span(left.span.lo, right.span.hi);
-        return Ok(expr(ast::Binary(binop, left, right), s));
+        Ok(expr(ast::Binary(binop, left, right), s))
     }
 
     fn parse_call(&mut self, left: Bexpr) -> ExprResult {
@@ -300,7 +299,7 @@ impl<'a> Parser<'a> {
         }
         let close_paren = consume_token!(self, CloseDelim(Parenthesis), PE::CallExpCloseParen);
         let s = span(left.span.lo, close_paren.span.hi);
-        return Ok(expr(ast::FnCall(left, args), s));
+        Ok(expr(ast::FnCall(left, args), s))
     }
 
     fn parse_block(&mut self, start_curly: Token) -> ExprResult {
@@ -313,7 +312,7 @@ impl<'a> Parser<'a> {
             }
         );
         let s = span(start_curly.span.lo, close_curly.span.hi);
-        return Ok(expr(ast::Block(body), s));
+        Ok(expr(ast::Block(body), s))
     }
 
     fn parse_fn(&mut self, fn_token: Token) -> ExprResult {
@@ -366,7 +365,7 @@ impl<'a> Parser<'a> {
             CloseDelim(CurlyBrace),
             PE::FnExpCloseCurly { fn_name }
         );
-        return Ok(expr(
+        Ok(expr(
             ast::FnDefinition(ast::FunctionDefinition {
                 fn_name,
                 params,
@@ -374,7 +373,7 @@ impl<'a> Parser<'a> {
                 return_type,
             }),
             span(fn_token.span.lo, close_curly.span.hi),
-        ));
+        ))
     }
 
     fn parse_let(&mut self, let_token: Token) -> ExprResult {
@@ -385,7 +384,7 @@ impl<'a> Parser<'a> {
         // y * 2
         let init = self.parse_main(BindingPower::Top)?;
         let s = span(let_token.span.lo, init.span.hi);
-        return Ok(expr(ast::Let(let_token.span, ident, init), s));
+        Ok(expr(ast::Let(let_token.span, ident, init), s))
     }
 
     fn parse_if(&mut self, if_token: Token) -> ExprResult {
@@ -406,7 +405,7 @@ impl<'a> Parser<'a> {
             (None, true_branch.span.hi)
         };
         let s = span(if_token.span.lo, hi);
-        return Ok(expr(ast::If(cond, true_branch, false_branch), s));
+        Ok(expr(ast::If(cond, true_branch, false_branch), s))
     }
 }
 

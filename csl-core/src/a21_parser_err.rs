@@ -23,7 +23,7 @@ FnExpectedName => {
     format!("Expected identifier. Functions must have a name. {EXAMPLE_FN}")
 },
 ComparatorChainDisallowed => {
-    format!("Chaining comparison operations is not yet supported.")
+    "Chaining comparison operations is not yet supported.".to_string()
 },
 IfExpOpenParen => {
     format!("Expected '(' for condition of 'if' statement. {EXAMPLE_IF}")

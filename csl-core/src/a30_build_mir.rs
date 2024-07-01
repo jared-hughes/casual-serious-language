@@ -58,10 +58,10 @@ impl TopCtx {
                 param_type: self.lookup_type(&param.param_type)?,
             });
         }
-        return Ok(FnSignature {
+        Ok(FnSignature {
             param_types,
             return_type: self.lookup_type(&fn_def.return_type)?,
-        });
+        })
     }
 }
 
@@ -81,10 +81,8 @@ impl TopCtx {
             let FnDefinition(fn_def) = &stmt.body else {
                 return err(ME::TopLevelExpr { span: stmt.span });
             };
-            self.fn_table.insert(
-                fn_def.fn_name.name.clone(),
-                self.cook_fn_signature(&fn_def)?,
-            );
+            self.fn_table
+                .insert(fn_def.fn_name.name.clone(), self.cook_fn_signature(fn_def)?);
         }
         for stmt in &program.body {
             let FnDefinition(fn_def) = &stmt.body else {
@@ -92,8 +90,8 @@ impl TopCtx {
             };
             let name = fn_def.fn_name.name.clone();
             let ctx = Ctx::from_top(self);
-            let block = Ctx::build_body_from_fn(&ctx, &fn_def)?;
-            if let Some(..) = self.mir_program.fns.get(&name) {
+            let block = Ctx::build_body_from_fn(&ctx, fn_def)?;
+            if self.mir_program.fns.contains_key(&name) {
                 err(ME::DuplicateFnName {
                     span: fn_def.fn_name.span,
                     name: name.clone(),
@@ -139,10 +137,10 @@ impl<'ctx> Ctx<'ctx> {
         let mut body = mir::FnBody::new(param_types);
         let block = body.new_basic_block();
 
-        for (i, p) in sig.param_types.into_iter().enumerate() {
+        for (i, p) in sig.param_types.iter().enumerate() {
             let name = p.name.name.to_string();
             let ip = IP::from(i);
-            if let Some(..) = ctx.symbol_table.get_symbol(&name) {
+            if ctx.symbol_table.get_symbol(&name).is_some() {
                 Err(ME::DuplicateParameter {
                     span: p.name.span,
                     name: name.to_owned(),
@@ -172,28 +170,28 @@ impl<'ctx> Ctx<'ctx> {
         &mut self,
         body: &mut FnBody,
         block: BP,
-        stmts: &Vec<Expr>,
+        stmts: &[Expr],
     ) -> Result<((BP, IP), Span), Diag> {
         let mut block = block;
-        for (i, stmt) in (&stmts).into_iter().enumerate() {
+        for (i, stmt) in stmts.iter().enumerate() {
             match &stmt.body {
                 // TODO: Move Let and Ret special cases out of here, and make it return "never";
                 Ret(_, expr) => {
                     if i != stmts.len() - 1 {
                         return err(ME::MisplacedRet { span: stmt.span });
                     }
-                    let (block, ip) = self.add_expr(body, block, &expr)?;
+                    let (block, ip) = self.add_expr(body, block, expr)?;
                     return Ok(((block, ip), expr.span));
                 }
                 Let(_, ident, expr) => {
-                    if let Some(..) = self.symbol_table.get_symbol(&ident.name) {
+                    if self.symbol_table.get_symbol(&ident.name).is_some() {
                         return Err(ME::DuplicateDefinition {
                             span: ident.span,
                             name: ident.name.to_string(),
                         }
                         .into_diag());
                     }
-                    let (block1, ip) = self.add_expr(body, block, &expr)?;
+                    let (block1, ip) = self.add_expr(body, block, expr)?;
                     block = block1;
                     self.symbol_table.set_symbol(ident.name.to_string(), ip);
                 }
@@ -204,7 +202,7 @@ impl<'ctx> Ctx<'ctx> {
             }
         }
         let ip = body.push_unit_new_ip(block, DUMMY_SPAN);
-        return Ok(((block, ip), DUMMY_SPAN));
+        Ok(((block, ip), DUMMY_SPAN))
     }
 
     /// Returns (BP, IP).
@@ -227,12 +225,12 @@ impl<'ctx> Ctx<'ctx> {
                 (block, ip)
             }
             Unary(op, arg_node) => {
-                let (block, arg) = self.add_expr(body, block, &arg_node)?;
+                let (block, arg) = self.add_expr(body, block, arg_node)?;
                 (block, body.add_unary(block, *op, arg)?)
             }
             Binary(op, left_node, right_node) => {
-                let (block, left) = self.add_expr(body, block, &left_node)?;
-                let (block, right) = self.add_expr(body, block, &right_node)?;
+                let (block, left) = self.add_expr(body, block, left_node)?;
+                let (block, right) = self.add_expr(body, block, right_node)?;
                 (block, body.add_binary(block, *op, left, right)?)
             }
             FnDefinition(fn_def) => err(ME::FnInExpr {
@@ -289,7 +287,7 @@ impl<'ctx> Ctx<'ctx> {
                 (block, ip)
             }
             If(cond_node, if_node, else_node) => {
-                let (block, cond_ip) = self.add_expr(body, block, &cond_node)?;
+                let (block, cond_ip) = self.add_expr(body, block, cond_node)?;
                 {
                     let cond_type = body.get_type(cond_ip);
                     if cond_type != Bool {
@@ -311,9 +309,9 @@ impl<'ctx> Ctx<'ctx> {
                     },
                 );
                 // Add branches
-                let (if_block, if_ip) = self.add_expr(body, if_block, &if_node)?;
+                let (if_block, if_ip) = self.add_expr(body, if_block, if_node)?;
                 let (else_block, else_ip) = match else_node {
-                    Some(else_node) => self.add_expr(body, else_block, &else_node)?,
+                    Some(else_node) => self.add_expr(body, else_block, else_node)?,
                     None => (else_block, body.push_unit_new_ip(block, DUMMY_SPAN)),
                 };
                 let out_block = body.new_basic_block();
@@ -366,7 +364,7 @@ impl FnBody {
                 arg_type,
             })?,
         };
-        return Ok(self.push_assign_new_ip(block, mir::Unary(op1, arg), op.span));
+        Ok(self.push_assign_new_ip(block, mir::Unary(op1, arg), op.span))
     }
 
     fn add_binary(&mut self, block: BP, op: BinOp, left: IP, right: IP) -> Result<IP, Diag> {
@@ -410,7 +408,7 @@ impl FnBody {
                 right_type,
             })?,
         };
-        return Ok(self.push_assign_new_ip(block, mir::Binary(op2, left, right), op.span));
+        Ok(self.push_assign_new_ip(block, mir::Binary(op2, left, right), op.span))
     }
 }
 
@@ -432,11 +430,11 @@ mod build_mir_expr_block {
 
     fn check_build_mir(input: &str, expect: Expect) {
         let ty = match () {
-            () if input.contains("<") => "bool",
-            () if input.contains(">") => "bool",
+            () if input.contains('<') => "bool",
+            () if input.contains('>') => "bool",
             () if input.contains("==") => "bool",
             () if input.contains("!=") => "bool",
-            () if input.contains(".") => "f64",
+            () if input.contains('.') => "f64",
             () => "i64",
         };
         let program = format!("fn f() -> {ty} {{ ret {input}; }}");
@@ -747,7 +745,7 @@ mod build_mir_functions {
 
     fn mir_from_string(input: &str) -> Result<mir::Program, Diag> {
         let ast_program = parse(input)?;
-        Ok(ast_to_mir(&ast_program)?)
+        ast_to_mir(&ast_program)
     }
 
     fn check_build_mir(input: &str, expect: Expect) {

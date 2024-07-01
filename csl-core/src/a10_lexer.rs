@@ -59,12 +59,12 @@ impl<'a> Iterator for RawLexer<'a> {
 
     fn next(&mut self) -> Option<TokenLen<'a>> {
         let token = self.next_raw_token();
-        return match token.kind {
+        match token.kind {
             // Stop the iterator
             Eof => None,
             // Common case
             _ => Some(token),
-        };
+        }
     }
 }
 
@@ -119,7 +119,7 @@ impl<'a> RawLexer<'a> {
     fn slice(&self) -> &'a str {
         let start = self.chars_token_start.as_str();
         let num_bytes = start.len() - self.chars.as_str().len();
-        return &start[0..num_bytes];
+        &start[0..num_bytes]
     }
 
     /// Parses a token from the input string, including whitespace.
@@ -281,9 +281,9 @@ impl<'a> RawLexer<'a> {
                 match (i64::from_str(significand), i64::from_str(exponent)) {
                     (Ok(s), Ok(ex)) => {
                         if ex < 0 {
-                            return invalid("Integer exponent cannot be negative. Use '.' if you want a float literal.");
+                            invalid("Integer exponent cannot be negative. Use '.' if you want a float literal.")
                         } else if ex > 20 {
-                            return invalid("Integer exponent is much too large. Use '.' if you want a float literal.");
+                            invalid("Integer exponent is much too large. Use '.' if you want a float literal.")
                         } else {
                             let mut v = s;
                             let mut e = ex;
@@ -291,7 +291,7 @@ impl<'a> RawLexer<'a> {
                                 v *= 10;
                                 e -= 1;
                             }
-                            return Literal(Integer(v));
+                            Literal(Integer(v))
                         }
                     }
                     // Should be unreachable:
@@ -308,14 +308,9 @@ impl<'a> RawLexer<'a> {
 
     fn eat_decimal_digits(&mut self) -> bool {
         let mut has_digits = false;
-        loop {
-            match self.peek() {
-                '0'..='9' => {
-                    has_digits = true;
-                    self.consume();
-                }
-                _ => break,
-            }
+        while let '0'..='9' = self.peek() {
+            has_digits = true;
+            self.consume();
         }
         has_digits
     }
@@ -351,7 +346,7 @@ fn is_id_continue(c: char) -> bool {
 }
 
 fn is_digit(c: char) -> bool {
-    matches!(c, '0'..='9')
+    c.is_ascii_digit()
 }
 
 #[cfg(test)]
@@ -360,11 +355,9 @@ mod lexer_tests {
     use expect_test::{expect, Expect};
 
     fn check_lexing(input: &str, expect: Expect) {
+        #[allow(clippy::format_collect)]
         let actual: String = RawLexer::new(input)
-            .filter(|tok| match tok.kind {
-                Whitespace => false,
-                _ => true,
-            })
+            .filter(|tok| !matches!(tok.kind, Whitespace))
             .map(|token| format!("{:?}\n", token))
             .collect();
         expect.assert_eq(&actual)
@@ -516,6 +509,7 @@ mod lexer_tests {
     }
 
     fn check_lexing_with_whitespace(input: &str, expect: Expect) {
+        #[allow(clippy::format_collect)]
         let actual: String = RawLexer::new(input)
             .map(|token| format!("{:?}\n", token))
             .collect();

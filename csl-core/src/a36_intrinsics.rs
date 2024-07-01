@@ -148,13 +148,13 @@ EqF64 => fn eq_f64(a=av: F64, b=bv: F64) -> Bool {
 
 /* bool */
 LtBool => fn lt_bool(a=av: Bool, b=bv: Bool) -> Bool {
-    a < b
+    !a & b
 }
 LtEqBool => fn lteq_bool(a=av: Bool, b=bv: Bool) -> Bool {
     a <= b
 }
 GtBool => fn gt_bool(a=av: Bool, b=bv: Bool) -> Bool {
-    a > b
+    a & !b
 }
 GtEqBool => fn gteq_bool(a=av: Bool, b=bv: Bool) -> Bool {
     a >= b
