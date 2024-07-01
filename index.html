@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8" />
+    <title>Casual Serious Language (CSL) Playground</title>
+    <style>
+      h1 {
+        margin-block-start: 0.4em;
+        margin-block-end: 0.2em;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Casual Serious Language (CSL) Playground</h1>
+      <nav>
+        <a href="./syntax">Syntax</a>
+      </nav>
+    </header>
+    <p>
+      Examples:
+      <span id="examples"></span>
+    </p>
+    <form action="javascript:;">
+      <label for="src">Source:</label>
+      <br />
+      <textarea id="src" name="src" required rows="20" cols="60"> </textarea>
+      <br />
+      <button type="submit" value="Submit">Run locally</button>
+    </form>
+    <pre id="output"></pre>
+    <script type="module" src="./js/main.js"></script>
+  </body>
+</html>
