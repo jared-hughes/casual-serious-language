@@ -51,6 +51,21 @@ pub enum Delimiter {
     CurlyBrace,
 }
 
+pub use Keyword::*;
+#[derive(Debug, Clone, Copy)]
+pub enum Keyword {
+    /// 'fn'
+    Fn,
+    /// 'ret'
+    Ret,
+    /// 'let'
+    Let,
+    /// 'if'
+    If,
+    /// 'else'
+    Else,
+}
+
 pub use TokenKind::*;
 #[derive(Debug, Clone, Copy)]
 pub enum TokenKind<'a> {
@@ -76,16 +91,7 @@ pub enum TokenKind<'a> {
     Bang,
 
     /* Keywords */
-    /// 'fn'
-    KwFn,
-    /// 'ret'
-    KwRet,
-    /// 'let'
-    KwLet,
-    /// 'if'
-    KwIf,
-    /// 'else'
-    KwElse,
+    Kw(Keyword),
 
     /* Atoms */
     /// Literal number

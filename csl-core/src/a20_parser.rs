@@ -198,7 +198,7 @@ impl<'a> Parser<'a> {
                 let s = span(start.span.lo, close_paren.span.hi);
                 Ok(expr(ast::Paren(inner), s))
             }
-            KwRet => {
+            Kw(Ret) => {
                 let inner = self.parse_main(BindingPower::Top)?;
                 let s = span(start.span.lo, inner.span.hi);
                 Ok(expr(ast::Ret(start.span, inner), s))
@@ -210,10 +210,10 @@ impl<'a> Parser<'a> {
                 let s = span(start.span.lo, inner.span.hi);
                 Ok(expr(ast::Unary(unop, inner), s))
             }
-            KwFn => self.parse_fn(start),
+            Kw(Fn) => self.parse_fn(start),
             OpenDelim(CurlyBrace) => self.parse_block(start),
-            KwLet => self.parse_let(start),
-            KwIf => self.parse_if(start),
+            Kw(Let) => self.parse_let(start),
+            Kw(If) => self.parse_if(start),
             Bang => {
                 let inner = self.parse_main(BindingPower::Prefix)?;
                 let unop = respan(ast::UnaryOpKind::Not, start.span);
@@ -223,7 +223,7 @@ impl<'a> Parser<'a> {
             BinOp(_) => err(PE::UnexpectedBinaryInitial.span(start.span)),
             CloseDelim(Parenthesis) => err(PE::UnmatchedCloseParen.span(start.span)),
             Eof => err(PE::UnexpectedEOF.span(start.span)),
-            CloseDelim(CurlyBrace) | KwElse | Colon | Comma | ThinArrow | Semi | Equals => {
+            CloseDelim(CurlyBrace) | Kw(Else) | Colon | Comma | ThinArrow | Semi | Equals => {
                 err(PE::GeneralUnexpected.span(start.span))
             }
             Whitespace | Invalid(_) => panic!("Whitespace should be skipped"),
@@ -395,7 +395,7 @@ impl<'a> Parser<'a> {
         // )
         consume_token!(self, CloseDelim(Parenthesis), PE::IfExpCloseParen);
         let true_branch = self.parse_main(BindingPower::Top)?;
-        let (false_branch, hi) = if let KwElse = self.peek()?.kind {
+        let (false_branch, hi) = if let Kw(Else) = self.peek()?.kind {
             // else
             self.next()?;
             let false_branch = self.parse_main(BindingPower::Top)?;
@@ -444,7 +444,7 @@ fn terminates_block(tok: TokenKind) -> bool {
     match tok {
         CloseDelim(_) | Eof | Invalid(_) => true,
         Semi | BinOp(_) | OpenDelim(_) | ThinArrow | Comma | Literal(_) | Colon | Ident(_)
-        | KwFn | KwRet | KwLet | KwIf | KwElse | Equals | Bang => false,
+        | Kw(_) | Equals | Bang => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }
@@ -458,9 +458,7 @@ fn terminates_fn_params(tok: TokenKind) -> bool {
         Bang | BinOp(_) | OpenDelim(_) | CloseDelim(_) | Eof | ThinArrow | Invalid(_) | Semi => {
             true
         }
-        Comma | Literal(_) | Colon | Ident(_) | KwFn | KwRet | KwLet | KwIf | KwElse | Equals => {
-            false
-        }
+        Comma | Literal(_) | Colon | Ident(_) | Kw(_) | Equals => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }

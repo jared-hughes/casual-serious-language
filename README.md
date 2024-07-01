@@ -14,7 +14,6 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 - Allow typing `()` as return type of functions.
 - Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.
 - Allow type hints on variables.
-- Deflatten `KwIf` etc to `Kw(If)`.
 - Literals `true` and `false`.
 - `return` keyword as described in syntax.md.
 - `never` type to properly type "return"

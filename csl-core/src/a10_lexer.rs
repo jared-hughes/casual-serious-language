@@ -227,11 +227,11 @@ impl<'a> RawLexer<'a> {
         self.eat_while(is_id_continue);
         let s = self.slice();
         match () {
-            () if s == "fn" => KwFn,
-            () if s == "ret" => KwRet,
-            () if s == "let" => KwLet,
-            () if s == "if" => KwIf,
-            () if s == "else" => KwElse,
+            () if s == "fn" => Kw(Fn),
+            () if s == "ret" => Kw(Ret),
+            () if s == "let" => Kw(Let),
+            () if s == "if" => Kw(If),
+            () if s == "else" => Kw(Else),
             _ => Ident(s),
         }
     }
@@ -499,11 +499,11 @@ mod lexer_tests {
         check_lexing(
             "fn ret let if else",
             expect![[r#"
-                KwFn [len=2]
-                KwRet [len=3]
-                KwLet [len=3]
-                KwIf [len=2]
-                KwElse [len=4]
+                Kw(Fn) [len=2]
+                Kw(Ret) [len=3]
+                Kw(Let) [len=3]
+                Kw(If) [len=2]
+                Kw(Else) [len=4]
             "#]],
         );
     }
