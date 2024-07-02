@@ -19,20 +19,6 @@ pub(crate) enum CompareOpKind {
     Eq,
 }
 
-impl fmt::Display for CompareOpKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Lt => "<",
-            LtEq => "<=",
-            Gt => ">",
-            GtEq => ">=",
-            Neq => "!=",
-            Eq => "==",
-        };
-        write!(f, "{}", s)
-    }
-}
-
 pub(crate) use BinOpKind::*;
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum BinOpKind {

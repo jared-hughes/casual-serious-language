@@ -20,3 +20,6 @@ name = "csl"
 [dependencies.casual_serious_language]
 path = "../csl-core"
 version = "0.1.0"
+
+[dependencies]
+mutants = {workspace = true}

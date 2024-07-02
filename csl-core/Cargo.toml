@@ -16,7 +16,8 @@ categories = ["compilers", "command-line-utilities"]
 name = "casual_serious_language"
 
 [dependencies]
-index_vec = "0.1.3"
+index_vec = {workspace = true}
+mutants = {workspace = true}
 
 [dev-dependencies]
-expect-test = "1.5.0"
+expect-test = {workspace = true}

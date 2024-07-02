@@ -56,6 +56,7 @@ impl Sub for ByteLen {
     type Output = ByteLen;
 
     #[inline(always)]
+    #[mutants::skip] // Unused but good for reference
     fn sub(self, rhs: ByteLen) -> ByteLen {
         ByteLen(self.0 - rhs.0)
     }
@@ -65,6 +66,7 @@ impl Add for ByteLen {
     type Output = ByteLen;
 
     #[inline(always)]
+    #[mutants::skip] // Unused but good for reference
     fn add(self, rhs: ByteLen) -> ByteLen {
         ByteLen(self.0 + rhs.0)
     }

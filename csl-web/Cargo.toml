@@ -18,7 +18,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
+mutants = {workspace = true}
 
 [dependencies.casual_serious_language]
 path = "../csl-core"
 version = "0.1.0"
+
+[dev-dependencies]
+expect-test = {workspace = true}

@@ -1,5 +1,6 @@
 use casual_serious_language::compile_and_interpret;
 
+#[mutants::skip] // We don't test the CLI yet
 fn main() {
     let r = run();
     if let Err(err) = r {
@@ -7,6 +8,7 @@ fn main() {
     }
 }
 
+#[mutants::skip] // We don't test the CLI yet
 fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 2 {

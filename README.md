@@ -100,3 +100,25 @@ Then serve the files in public-deploy. I like doing
 ```sh
 ./scripts/build-site.sh && npx http-server public-deploy/ -c-1
 ```
+
+## Mutation Testing
+
+Install cargo-mutants:
+
+```sh
+cargo install --locked cargo-mutants
+```
+
+Test mutants across whole codebase:
+
+```sh
+cargo mutants
+```
+
+The relevant outputs are in the `mutants.out` directory, mostly `missed.txt`.
+
+Some useful flags:
+
+- Use four cores: `-j 4`
+- Only try mutating one file: `-f csl-core/src/a30_build_mir.rs`
+- Only try mutating what changed in a diff: `--in-diff git.diff`

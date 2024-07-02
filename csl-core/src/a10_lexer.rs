@@ -77,6 +77,7 @@ impl<'a> RawLexer<'a> {
     }
 
     /// Return the char that `chars` points to, and shift it along.
+    #[mutants::skip] // Will loop forever if it doesn't call next()
     fn consume(&mut self) -> Option<char> {
         self.chars.next()
     }
@@ -91,18 +92,18 @@ impl<'a> RawLexer<'a> {
         self.chars.clone().next().unwrap_or(EOF_CHAR)
     }
 
-    /// Checks if there is nothing more to consume.
-    fn is_eof(&self) -> bool {
-        self.chars.as_str().is_empty()
-    }
-
     /// Eats symbols while predicate returns true, or until the end of file is reached.
     /// After calling this method, `chars` will point to one after the last
     /// character satisfying the predicate.
     fn eat_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
-        // It was tried making optimized version of this for e.g. line comments, but
-        // LLVM can inline all of this and compile it down to fast iteration over bytes.
-        while predicate(self.peek()) && !self.is_eof() {
+        loop {
+            let peek = self.peek();
+            if !predicate(peek) {
+                break;
+            }
+            if let EOF_CHAR = peek {
+                break;
+            }
             self.consume();
         }
     }

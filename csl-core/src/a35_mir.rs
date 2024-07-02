@@ -164,6 +164,7 @@ impl FnBody {
         &self.blocks[block].terminator
     }
 
+    #[mutants::skip] // This is a no-op when codegen is correct.
     fn sanity_check_assign(&self, ip: IP, rval: &RValue) {
         match *rval {
             Use(a, ..) => {

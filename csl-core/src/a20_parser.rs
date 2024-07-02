@@ -1290,6 +1290,11 @@ mod parser_stmt_tests {
                 )
             "#]],
         );
+        check_parsing(
+            "let x = 5
+            let y = 6",
+            expect!["At 23-25: Expected semicolon to end the statement"],
+        );
     }
 
     #[test]
