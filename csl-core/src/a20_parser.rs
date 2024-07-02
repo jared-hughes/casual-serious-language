@@ -132,7 +132,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse statements until a '}' or EOF.
-    fn parse_stmts(&mut self) -> Result<Vec<ast::Expr>, Diag> {
+    fn parse_stmts(&mut self) -> Result<Vec<ast::Statement>, Diag> {
         let mut stmts = vec![];
         loop {
             self.skip_semis()?;
@@ -141,13 +141,56 @@ impl<'a> Parser<'a> {
                 return Ok(stmts);
             }
             // Parse the main expr.
-            let expr = self.parse_main(BindingPower::Top)?;
+            let stmt = self.parse_one_stmt()?;
             // ;
-            if needs_semi(&expr.body) {
+            if needs_semi(&stmt.expr.body) {
                 consume_token!(self, Semi, PE::ExpectedSemi);
             }
-            stmts.push(*expr);
+            stmts.push(stmt);
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn parse_one_stmt_for_tests(&mut self) -> Result<ast::Statement, Diag> {
+        let stmt = self.parse_one_stmt()?;
+        self.assert_stream_done()?;
+        Ok(stmt)
+    }
+
+    fn parse_one_stmt(&mut self) -> Result<ast::Statement, Diag> {
+        Ok(match self.peek()?.kind {
+            Kw(Let) => {
+                let let_token = self.next()?;
+                // x
+                let ident = consume_ident!(self, PE::LetExpName);
+                // =
+                consume_token!(self, Equals, PE::LetExpEquals { ident });
+                // y * 2
+                let expr = self.parse_expr()?;
+                ast::Statement {
+                    span: span(let_token.span.lo, expr.span.hi),
+                    kind: ast::StatementKind::Let(ident),
+                    expr,
+                }
+            }
+            Kw(Ret) => {
+                let ret_token = self.next()?;
+                let expr = self.parse_expr()?;
+                ast::Statement {
+                    span: span(ret_token.span.lo, expr.span.hi),
+                    kind: ast::StatementKind::Ret,
+                    expr,
+                }
+            }
+            _ => {
+                let expr = self.parse_expr()?;
+                ast::Statement {
+                    span: expr.span,
+                    kind: ast::StatementKind::Bare,
+                    expr,
+                }
+            }
+        })
     }
 
     fn skip_semis(&mut self) -> Result<(), Diag> {
@@ -164,13 +207,17 @@ impl<'a> Parser<'a> {
 impl<'a> Parser<'a> {
     #[cfg(test)]
     pub(crate) fn parse_expr_for_tests(&mut self) -> ExprResult {
-        let expr = self.parse_main(BindingPower::Top)?;
+        let expr = self.parse_expr()?;
         self.assert_stream_done()?;
         Ok(expr)
     }
 
+    fn parse_expr(&mut self) -> ExprResult {
+        self.parse_main(BindingPower::Top)
+    }
+
     /// Parse an expression
-    pub(crate) fn parse_main(&mut self, last_bp: BindingPower) -> ExprResult {
+    fn parse_main(&mut self, last_bp: BindingPower) -> ExprResult {
         let mut left = self.parse_initial()?;
         loop {
             if let Eof = self.peek()?.kind {
@@ -196,7 +243,7 @@ impl<'a> Parser<'a> {
                     let s = span(start.span.lo, close_paren.span.hi);
                     return Ok(expr(ast::Literal(ast::Lit::Unit), s));
                 }
-                let inner = self.parse_main(BindingPower::Top)?;
+                let inner = self.parse_expr()?;
                 let close_paren = consume_token!(
                     self,
                     CloseDelim(Parenthesis),
@@ -204,11 +251,6 @@ impl<'a> Parser<'a> {
                 );
                 let s = span(start.span.lo, close_paren.span.hi);
                 Ok(expr(ast::Paren(inner), s))
-            }
-            Kw(Ret) => {
-                let inner = self.parse_main(BindingPower::Top)?;
-                let s = span(start.span.lo, inner.span.hi);
-                Ok(expr(ast::Ret(start.span, inner), s))
             }
             BinOp(Plus) => err(PE::UnaryPlusDisallowed.span(start.span)),
             BinOp(Minus) => {
@@ -219,7 +261,6 @@ impl<'a> Parser<'a> {
             }
             Kw(Fn) => self.parse_fn(start),
             OpenDelim(CurlyBrace) => self.parse_block(start),
-            Kw(Let) => self.parse_let(start),
             Kw(If) => self.parse_if(start),
             Bang => {
                 let inner = self.parse_main(BindingPower::Prefix)?;
@@ -230,9 +271,13 @@ impl<'a> Parser<'a> {
             BinOp(_) => err(PE::UnexpectedBinaryInitial.span(start.span)),
             CloseDelim(Parenthesis) => err(PE::UnmatchedCloseParen.span(start.span)),
             Eof => err(PE::UnexpectedEOF.span(start.span)),
-            CloseDelim(CurlyBrace) | Kw(Else) | Colon | Comma | ThinArrow | Semi | Equals => {
-                err(PE::GeneralUnexpected.span(start.span))
-            }
+            CloseDelim(CurlyBrace)
+            | Kw(Else | Let | Ret)
+            | Colon
+            | Comma
+            | ThinArrow
+            | Semi
+            | Equals => err(PE::GeneralUnexpected.span(start.span)),
             Whitespace | Invalid(_) => panic!("Whitespace should be skipped"),
         }
     }
@@ -294,7 +339,7 @@ impl<'a> Parser<'a> {
         }
         // main loop
         while maybe_starts_expr(self.peek()?.kind) {
-            let arg = self.parse_main(BindingPower::Top)?;
+            let arg = self.parse_expr()?;
             // , or )
             let after_arg = self.peek()?;
             // Don't need comma ',' if next token is ')'
@@ -388,32 +433,21 @@ impl<'a> Parser<'a> {
         if !maybe_starts_expr(peeked.kind) {
             err(PE::ExpType.span(peeked.span))?;
         }
-        self.parse_main(BindingPower::Top)
-    }
-
-    fn parse_let(&mut self, let_token: Token) -> ExprResult {
-        // x
-        let ident = consume_ident!(self, PE::FnExpectedName);
-        // =
-        consume_token!(self, Equals, PE::LetExpEquals { ident });
-        // y * 2
-        let init = self.parse_main(BindingPower::Top)?;
-        let s = span(let_token.span.lo, init.span.hi);
-        Ok(expr(ast::Let(let_token.span, ident, init), s))
+        self.parse_expr()
     }
 
     fn parse_if(&mut self, if_token: Token) -> ExprResult {
         // (
         consume_token!(self, OpenDelim(Parenthesis), PE::IfExpOpenParen);
         // x > 2
-        let cond = self.parse_main(BindingPower::Top)?;
+        let cond = self.parse_expr()?;
         // )
         consume_token!(self, CloseDelim(Parenthesis), PE::IfExpCloseParen);
-        let true_branch = self.parse_main(BindingPower::Top)?;
+        let true_branch = self.parse_expr()?;
         let (false_branch, hi) = if let Kw(Else) = self.peek()?.kind {
             // else
             self.next()?;
-            let false_branch = self.parse_main(BindingPower::Top)?;
+            let false_branch = self.parse_expr()?;
             let hi = false_branch.span.hi;
             (Some(false_branch), hi)
         } else {
@@ -1100,72 +1134,34 @@ mod parser_expr_tests {
     }
 
     #[test]
-    fn let_basic() {
-        check_parsing(
-            "let x = 5 + 3",
-            expect![[r#"
-                (1-13)Let(1-3)[x](
-                    (9-13)Binary[Add(11)](
-                        (9)Literal(Integer(5)),
-                        (13)Literal(Integer(3)),
-                    ),
-                )"#]],
-        );
-    }
-
-    #[test]
-    fn let_errors() {
-        check_parsing(
-            "let",
-            expect!["At (!4,4!): Expected identifier. Functions must have a name. For example: `fn add(x: u64, y: u64) -> u64 { x + y }`"],
-        );
-        check_parsing(
-            "let x",
-            expect!["At (!6,6!): Expected an '=', to provide an initial value for 'x'. For example: `let x = 5;`"],
-        );
-        check_parsing("let x 5", expect!["At 7: Expected an '=', to provide an initial value for 'x'. For example: `let x = 5;`"]);
-        check_parsing(
-            "let x =",
-            expect!["At (!8,8!): Hold your horses. An EOF already?"],
-        );
-    }
-
-    #[test]
     fn block_in_expr() {
         check_parsing(
-            "let x = { ret 1 + 2; } + 6",
+            "1 + { ret 1 + 2; } + 6",
             expect![[r#"
-                (1-26)Let(1-3)[x](
-                    (9-26)Binary[Add(24)](
-                        (9-22)Block{
-                            (11-19)ret(11-13) (
-                                (15-19)Binary[Add(17)](
-                                    (15)Literal(Integer(1)),
-                                    (19)Literal(Integer(2)),
-                                ),
+                (1-22)Binary[Add(20)](
+                    (1-18)Binary[Add(3)](
+                        (1)Literal(Integer(1)),
+                        (5-18)Block{
+                            (7-15) ret (11-15)Binary[Add(13)](
+                                (11)Literal(Integer(1)),
+                                (15)Literal(Integer(2)),
                             ),
                         },
-                        (26)Literal(Integer(6)),
                     ),
+                    (22)Literal(Integer(6)),
                 )"#]],
         );
         check_parsing(
-            "let x = -{ let y = 3; ret y + 2; }",
+            "-{ let y = 3; ret y + 2; }",
             expect![[r#"
-                (1-34)Let(1-3)[x](
-                    (9-34)Unary[Neg(9)](
-                        (10-34)Block{
-                            (12-20)Let(12-14)[y](
-                                (20)Literal(Integer(3)),
-                            ),
-                            (23-31)ret(23-25) (
-                                (27-31)Binary[Add(29)](
-                                    (27)Ident("y"),
-                                    (31)Literal(Integer(2)),
-                                ),
-                            ),
-                        },
-                    ),
+                (1-26)Unary[Neg(1)](
+                    (2-26)Block{
+                        (4-12) let y = (12)Literal(Integer(3)),
+                        (15-23) ret (19-23)Binary[Add(21)](
+                            (19)Ident("y"),
+                            (23)Literal(Integer(2)),
+                        ),
+                    },
                 )"#]],
         );
         check_parsing(
@@ -1175,9 +1171,7 @@ mod parser_expr_tests {
                     (1-10)Binary[Add(2)](
                         (1)Literal(Integer(1)),
                         (3-10)Block{
-                            (4-8)ret(4-6) (
-                                (8)Literal(Integer(2)),
-                            ),
+                            (4-8) ret (8)Literal(Integer(2)),
                         },
                     ),
                     (12)Literal(Integer(4)),
@@ -1281,6 +1275,51 @@ mod parser_stmt_tests {
     use expect_test::{expect, Expect};
 
     fn check_parsing(input: &str, expect: Expect) {
+        let actual: String = match Parser::new(input).parse_one_stmt_for_tests() {
+            Ok(expr) => format!("{:#?}", expr),
+            Err(diag) => format!("{:#?}", diag),
+        };
+        expect.assert_eq(&actual)
+    }
+
+    #[test]
+    fn let_stmt() {
+        check_parsing("let x = 5", expect!["(1-9) let x = (9)Literal(Integer(5))"]);
+        check_parsing("let x", expect!["At (!6,6!): Expected an '=', to provide an initial value for 'x'. For example: `let x = 5;`"]);
+        check_parsing("()", expect!["(1-2)Literal(Unit)"]);
+    }
+
+    #[test]
+    fn let_basic() {
+        check_parsing(
+            "let x = 5 + 3",
+            expect![[r#"
+            (1-13) let x = (9-13)Binary[Add(11)](
+                (9)Literal(Integer(5)),
+                (13)Literal(Integer(3)),
+            )"#]],
+        );
+    }
+
+    #[test]
+    fn let_errors() {
+        check_parsing("let;", expect!["At 4: Expected identifier. A 'let' statement must assign to a name. For example: `let x = 5;`"]);
+        check_parsing("let x;", expect!["At 6: Expected an '=', to provide an initial value for 'x'. For example: `let x = 5;`"]);
+        check_parsing("let x 5;", expect!["At 7: Expected an '=', to provide an initial value for 'x'. For example: `let x = 5;`"]);
+        check_parsing(
+            "let x =",
+            expect!["At (!8,8!): Hold your horses. An EOF already?"],
+        );
+        check_parsing("let x =;", expect!["At 8: Unexpected token."]);
+    }
+}
+
+#[cfg(test)]
+mod parser_fn_tests {
+    use super::*;
+    use expect_test::{expect, Expect};
+
+    fn check_parsing(input: &str, expect: Expect) {
         let actual: String = match parse(input) {
             Ok(prog) => format!("{:#?}", prog),
             Err(diag) => format!("{:#?}", diag),
@@ -1301,14 +1340,10 @@ mod parser_stmt_tests {
                     (3)Literal(Integer(2)),
                 )
                 (5-32)FnDefinition[three]() -> (19-21)Ident("i64") {
-                    (25-29)ret(25-27) (
-                        (29)Literal(Integer(3)),
-                    ),
+                    (25-29) ret (29)Literal(Integer(3)),
                 }
                 (46-72)FnDefinition[four]() -> (59-61)Ident("i64") {
-                    (65-69)ret(65-67) (
-                        (69)Literal(Integer(4)),
-                    ),
+                    (65-69) ret (69)Literal(Integer(4)),
                 }
                 (86-88)Binary[Add(87)](
                     (86)Literal(Integer(4)),
@@ -1329,9 +1364,7 @@ mod parser_stmt_tests {
             "fn three() -> i64 { ret 3; }",
             expect![[r#"
                 (1-28)FnDefinition[three]() -> (15-17)Ident("i64") {
-                    (21-25)ret(21-23) (
-                        (25)Literal(Integer(3)),
-                    ),
+                    (21-25) ret (25)Literal(Integer(3)),
                 }
             "#]],
         );
@@ -1339,11 +1372,9 @@ mod parser_stmt_tests {
             "fn double(x: i64) -> i64 { ret 2*x; }",
             expect![[r#"
                 (1-37)FnDefinition[double](x: (14-16)Ident("i64")) -> (22-24)Ident("i64") {
-                    (28-34)ret(28-30) (
-                        (32-34)Binary[Mul(33)](
-                            (32)Literal(Integer(2)),
-                            (34)Ident("x"),
-                        ),
+                    (28-34) ret (32-34)Binary[Mul(33)](
+                        (32)Literal(Integer(2)),
+                        (34)Ident("x"),
                     ),
                 }
             "#]],
@@ -1352,11 +1383,9 @@ mod parser_stmt_tests {
             "fn add(x: i64, y: i64) -> i64 { ret x + y; }",
             expect![[r#"
                 (1-44)FnDefinition[add](x: (11-13)Ident("i64"), y: (19-21)Ident("i64")) -> (27-29)Ident("i64") {
-                    (33-41)ret(33-35) (
-                        (37-41)Binary[Add(39)](
-                            (37)Ident("x"),
-                            (41)Ident("y"),
-                        ),
+                    (33-41) ret (37-41)Binary[Add(39)](
+                        (37)Ident("x"),
+                        (41)Ident("y"),
                     ),
                 }
             "#]],
@@ -1379,9 +1408,7 @@ mod parser_stmt_tests {
             "fn ignore(x: ()) -> () { ret (); }",
             expect![[r#"
                 (1-34)FnDefinition[ignore](x: (14-15)Literal(Unit)) -> (21-22)Literal(Unit) {
-                    (26-31)ret(26-28) (
-                        (30-31)Literal(Unit),
-                    ),
+                    (26-31) ret (30-31)Literal(Unit),
                 }
             "#]],
         );
@@ -1389,11 +1416,9 @@ mod parser_stmt_tests {
             "fn double(x: (i64)) -> (i64) { ret 2*x; }",
             expect![[r#"
                 (1-41)FnDefinition[double](x: (14-18)paren@(15-17)Ident("i64")) -> (24-28)paren@(25-27)Ident("i64") {
-                    (32-38)ret(32-34) (
-                        (36-38)Binary[Mul(37)](
-                            (36)Literal(Integer(2)),
-                            (38)Ident("x"),
-                        ),
+                    (32-38) ret (36-38)Binary[Mul(37)](
+                        (36)Literal(Integer(2)),
+                        (38)Ident("x"),
                     ),
                 }
             "#]],
@@ -1406,11 +1431,9 @@ mod parser_stmt_tests {
             "fn double(x: i64,) -> i64 { ret 2*x; }",
             expect![[r#"
                 (1-38)FnDefinition[double](x: (14-16)Ident("i64")) -> (23-25)Ident("i64") {
-                    (29-35)ret(29-31) (
-                        (33-35)Binary[Mul(34)](
-                            (33)Literal(Integer(2)),
-                            (35)Ident("x"),
-                        ),
+                    (29-35) ret (33-35)Binary[Mul(34)](
+                        (33)Literal(Integer(2)),
+                        (35)Ident("x"),
                     ),
                 }
             "#]],
@@ -1419,11 +1442,9 @@ mod parser_stmt_tests {
             "fn add(x: i64, y: i64,) -> i64 { ret x + y; }",
             expect![[r#"
                 (1-45)FnDefinition[add](x: (11-13)Ident("i64"), y: (19-21)Ident("i64")) -> (28-30)Ident("i64") {
-                    (34-42)ret(34-36) (
-                        (38-42)Binary[Add(40)](
-                            (38)Ident("x"),
-                            (42)Ident("y"),
-                        ),
+                    (34-42) ret (38-42)Binary[Add(40)](
+                        (38)Ident("x"),
+                        (42)Ident("y"),
                     ),
                 }
             "#]],
@@ -1442,9 +1463,7 @@ mod parser_stmt_tests {
             "fn f() -> i64 { let x = y; }",
             expect![[r#"
                 (1-28)FnDefinition[f]() -> (11-13)Ident("i64") {
-                    (17-25)Let(17-19)[x](
-                        (25)Ident("y"),
-                    ),
+                    (17-25) let x = (25)Ident("y"),
                 }
             "#]],
         );
@@ -1538,11 +1557,9 @@ mod parser_stmt_tests {
             "{ret 1 + 2;};",
             expect![[r#"
                 (1-12)Block{
-                    (2-10)ret(2-4) (
-                        (6-10)Binary[Add(8)](
-                            (6)Literal(Integer(1)),
-                            (10)Literal(Integer(2)),
-                        ),
+                    (2-10) ret (6-10)Binary[Add(8)](
+                        (6)Literal(Integer(1)),
+                        (10)Literal(Integer(2)),
                     ),
                 }
             "#]],

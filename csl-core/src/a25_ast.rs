@@ -103,7 +103,7 @@ pub(crate) struct FunctionParam {
 pub(crate) struct FunctionDefinition {
     pub(crate) fn_name: Ident,
     pub(crate) params: Vec<FunctionParam>,
-    pub(crate) body: Vec<Expr>,
+    pub(crate) body: Vec<Statement>,
     pub(crate) return_type: Box<Expr>,
 }
 
@@ -120,15 +120,11 @@ pub(crate) enum ExprInner {
     /// Function definition
     FnDefinition(FunctionDefinition),
     /// Block `y = { ret x + 1; }`
-    Block(Vec<Expr>),
-    /// Return with unchanged control flow, `ret x;`
-    Ret(Span, Box<Expr>),
+    Block(Vec<Statement>),
     /// Parenthesized expression `(x)`.
     Paren(Box<Expr>),
     /// Function call `f(x,y,z)`
     FnCall(Box<Expr>, Vec<Expr>),
-    /// Let assignment `let x = 3`
-    Let(Span, Ident, Box<Expr>),
     /// If expression `if (x > 0) 1 else 0`
     If(Box<Expr>, Box<Expr>, Option<Box<Expr>>),
 }
@@ -173,10 +169,6 @@ impl fmt::Debug for ExprInner {
                 write!(f, "Block")?;
                 f.debug_set().entries(exprs).finish()
             }
-            Ret(span, arg) => {
-                write!(f, "ret({:?}) ", span)?;
-                f.debug_tuple("").field(arg).finish()
-            }
             Paren(arg) => write!(f, "paren@{:#?}", arg),
             FnCall(fun, args) => {
                 write!(f, "call({:?})", fun)?;
@@ -185,10 +177,6 @@ impl fmt::Debug for ExprInner {
                     tup.field(arg);
                 }
                 tup.finish()
-            }
-            Let(span, ident, init) => {
-                write!(f, "Let({span:?})[{ident}]")?;
-                f.debug_tuple("").field(init).finish()
             }
             If(cond, true_branch, false_branch) => f
                 .debug_struct("If")
@@ -206,8 +194,35 @@ impl fmt::Debug for Expr {
     }
 }
 
+pub(crate) use StatementKind::*;
+pub(crate) enum StatementKind {
+    /// `let x = 5;`
+    Let(Ident),
+    /// `ret 5`
+    Ret,
+    /// `5`
+    Bare,
+}
+
+pub(crate) struct Statement {
+    pub(crate) span: Span,
+    pub(crate) kind: StatementKind,
+    pub(crate) expr: Box<Expr>,
+}
+
+impl fmt::Debug for Statement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            Let(ident) => write!(f, "({:?}) let {} = ", self.span, ident)?,
+            Ret => write!(f, "({:?}) ret ", self.span)?,
+            Bare => {}
+        }
+        write!(f, "{:?}", self.expr)
+    }
+}
+
 pub(crate) struct Program {
-    pub(crate) body: Vec<Expr>,
+    pub(crate) body: Vec<Statement>,
 }
 
 impl fmt::Debug for Program {

@@ -11,10 +11,13 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 Features (expected)
 
 - Add mutable variables, making if-without-else useful.
+- Allow variables to be uninitialized
+  - This supports some if-else assignments, and (in the future) `let` expressions that may not execute.
 - Allow type hints on variables.
 - Literals `true` and `false`.
 - `return` keyword as described in syntax.md.
-- Allow `let` and `ret` as expressions.
+- Allow `let` as an expression.
+  - Returns `bool` saying if the pattern match binding was successful.
 - `never` type to properly type "return"
 - Chaining comparison operations
 
@@ -40,6 +43,7 @@ Bug fixes
 
 Code cleanups
 
+- `FnDefinition` at statement-level
 - Proper lexer errors instead of `InvalidToken` storing a static string.
 - Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.
 - Figure how to type consequent parsing better. (macros?)
@@ -63,13 +67,7 @@ The WIP is so far from these actually being relevant:
 
 We use `clippy` for linting. Run `cargo clippy` or set up your editor to use clippy. The repository includes a `.vscode` that configures rust-analyzer to use clippy.
 
-To run all tests and take snapshots of what changed:
-
-```sh
-./scripts/update-snapshots.sh
-```
-
-To run on a particular file
+To run the CLI on a particular file
 
 ```sh
 cargo run filename.csl
@@ -102,9 +100,25 @@ Then serve the files in public-deploy. I like doing
 ./scripts/build-site.sh && npx http-server public-deploy/ -c-1
 ```
 
+## Testing
+
+For running existing tests, just run `cargo test`.
+
+We use [expect_test](https://docs.rs/expect-test/latest/expect_test/#) to make writing tests fun. In most tests, you don't have to write the expected value: just write `expect![["abc"]]`, and the following script will fill in the current results. Git is vital here to tell when results changed.
+
+To run all tests and fill in snapshots of what changed:
+
+```sh
+./scripts/update-snapshots.sh
+```
+
+One disadvantage of this approach is that it's too easy to forgot to look at the expected value of a test. Remember to check the diff for test changes!
+
 ## Mutation Testing
 
-Install cargo-mutants:
+Mutation Testing refers to automatically mutating the code (say, replacing a `-` with a `+`) and verifying that the resulting code fails some test. We use [cargo-mutants](https://mutants.rs/) for mutation testing.
+
+Install `cargo-mutants`:
 
 ```sh
 cargo install --locked cargo-mutants

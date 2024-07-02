@@ -92,14 +92,18 @@ impl TopCtx {
 
     fn build(&mut self, program: &Program) -> Result<(), Diag> {
         for stmt in &program.body {
-            let FnDefinition(fn_def) = &stmt.body else {
+            let FnDefinition(fn_def) = &stmt.expr.body else {
                 return err(ME::TopLevelExpr { span: stmt.span });
             };
+            if let Bare = stmt.kind {
+            } else {
+                return err(ME::TopLevelExpr { span: stmt.span });
+            }
             self.fn_table
                 .insert(fn_def.fn_name.name.clone(), self.cook_fn_signature(fn_def)?);
         }
         for stmt in &program.body {
-            let FnDefinition(fn_def) = &stmt.body else {
+            let FnDefinition(fn_def) = &stmt.expr.body else {
                 return err(ME::TopLevelExpr { span: stmt.span });
             };
             let name = fn_def.fn_name.name.clone();
@@ -182,18 +186,19 @@ impl Ctx<'_> {
     }
 
     /// Returns a tuple (ip, span of returning expr).
-    fn add_stmts_ret(&mut self, block: BP, stmts: &[Expr]) -> Result<((BP, IP), Span), Diag> {
+    fn add_stmts_ret(&mut self, block: BP, stmts: &[Statement]) -> Result<((BP, IP), Span), Diag> {
         let mut block = block;
         for (i, stmt) in stmts.iter().enumerate() {
-            match &stmt.body {
-                Ret(_, expr) => {
+            let expr = &stmt.expr;
+            match &stmt.kind {
+                Ret => {
                     if i != stmts.len() - 1 {
                         return err(ME::MisplacedRet { span: stmt.span });
                     }
                     let (block, ip) = self.add_expr(block, expr)?;
                     return Ok(((block, ip), expr.span));
                 }
-                Let(_, ident, expr) => {
+                Let(ident) => {
                     if self.symbol_table.get_symbol(&ident.name).is_some() {
                         return Err(ME::DuplicateDefinition {
                             span: ident.span,
@@ -206,7 +211,7 @@ impl Ctx<'_> {
                     self.symbol_table.set_symbol(ident.name.to_string(), ip);
                 }
                 _ => {
-                    let (block1, _ip) = self.add_expr(block, stmt)?;
+                    let (block1, _ip) = self.add_expr(block, expr)?;
                     block = block1;
                 }
             }
@@ -305,8 +310,6 @@ impl Ctx<'_> {
             FnDefinition(fn_def) => err(ME::FnInExpr {
                 span: fn_def.fn_name.span,
             })?,
-            Ret(span, _) => return err(ME::MisplacedRet { span: *span }),
-            Let(span, ..) => return err(ME::MisplacedLet { span: *span }),
             Block(stmts) => {
                 let mut child_ctx = self.child();
                 let ((block, ip), _sp) = child_ctx.add_stmts_ret(block, stmts)?;

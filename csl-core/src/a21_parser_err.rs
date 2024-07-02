@@ -23,6 +23,9 @@ ExpectedSemi => format!("Expected semicolon to end the statement"),
 FnExpectedName => {
     format!("Expected identifier. Functions must have a name. {EXAMPLE_FN}")
 },
+LetExpName => {
+    format!("Expected identifier. A 'let' statement must assign to a name. {EXAMPLE_LET}")
+},
 ComparatorChainDisallowed => {
     "Chaining comparison operations is not yet supported.".to_string()
 },
