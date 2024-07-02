@@ -8,7 +8,6 @@ pub(crate) trait Diagnostic {
 #[must_use]
 #[derive(Clone)]
 pub struct Diag {
-    // TODO: severity, suggestions
     pub(crate) message: String,
     pub(crate) span: Span,
 }

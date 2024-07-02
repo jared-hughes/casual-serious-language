@@ -21,7 +21,6 @@ impl<'ctx> SymbolTable<'ctx> {
     // TODO-perf: consider caching to avoid walking up a long table tree.
     pub(crate) fn get_symbol(&self, symb: &str) -> Option<IP> {
         if let Some(ip) = self.map.get(symb).cloned() {
-            // TODO: IP should derive Copy.
             return Some(ip);
         }
         if let Some(p) = &self.parent {

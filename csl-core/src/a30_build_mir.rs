@@ -186,7 +186,6 @@ impl Ctx<'_> {
         let mut block = block;
         for (i, stmt) in stmts.iter().enumerate() {
             match &stmt.body {
-                // TODO: Move Let and Ret special cases out of here, and make it return "never";
                 Ret(_, expr) => {
                     if i != stmts.len() - 1 {
                         return err(ME::MisplacedRet { span: stmt.span });

@@ -293,12 +293,12 @@ impl<'a> Parser<'a> {
             return err(PE::FnBadComma.span(after_open_paren.span));
         }
         // main loop
-        while !terminates_fn_params(self.peek()?.kind) {
+        while maybe_starts_expr(self.peek()?.kind) {
             let arg = self.parse_main(BindingPower::Top)?;
             // , or )
             let after_arg = self.peek()?;
             // Don't need comma ',' if next token is ')'
-            if !terminates_fn_params(after_arg.kind) {
+            if try_consume_comma(after_arg.kind) {
                 // Trailing comma, or comma between args
                 consume_token!(self, Comma, PE::CallExpComma);
             }
@@ -333,7 +333,7 @@ impl<'a> Parser<'a> {
             return err(PE::FnBadComma.span(after_open_paren.span));
         }
         // main loop
-        while !terminates_fn_params(self.peek()?.kind) {
+        while maybe_starts_expr(self.peek()?.kind) {
             // x
             let param = consume_ident!(self, PE::FnExpParameter { fn_name });
             // :
@@ -343,7 +343,7 @@ impl<'a> Parser<'a> {
             // , or )
             let after_param = self.peek()?;
             // Don't need comma ',' if next token is ')'
-            if !terminates_fn_params(after_param.kind) {
+            if try_consume_comma(after_param.kind) {
                 // Trailing comma, or comma between args
                 consume_token!(self, Comma, PE::ParamExpComma);
             }
@@ -385,7 +385,7 @@ impl<'a> Parser<'a> {
 
     fn parse_type(&mut self) -> ExprResult {
         let peeked = self.peek()?;
-        if !maybe_starts_type(peeked.kind) {
+        if !maybe_starts_expr(peeked.kind) {
             err(PE::ExpType.span(peeked.span))?;
         }
         self.parse_main(BindingPower::Top)
@@ -464,32 +464,29 @@ fn terminates_block(tok: TokenKind) -> bool {
     }
 }
 
-/// This function must return true for `CloseDelim(Parenthesis)` and `Eof`, and
-/// false for `Comma`. The behavior otherwise is arbitrary.
-/// If this returns true on a peeked token, we want that token to say
-/// "Expected )" instead of "Expected ','" in an error message.
-fn terminates_fn_params(tok: TokenKind) -> bool {
+fn try_consume_comma(tok: TokenKind) -> bool {
     match tok {
-        Bang
-        | BinOp(_)
+        Comma => true,
+        _ => maybe_starts_expr(tok),
+    }
+}
+
+/// This function must return false for `CloseDelim(Parenthesis)` and `Eof`, and
+/// true for `Comma` and any valid initial token for an expression.
+/// The behavior otherwise is arbitrary: `true` leads to "Expected )",
+/// and `false` leads to "Expected ','"
+fn maybe_starts_expr(tok: TokenKind) -> bool {
+    match tok {
+        BinOp(_) | OpenDelim(Parenthesis) | Literal(_) | Ident(_) | Kw(_) | Bang => true,
+        Comma
         | OpenDelim(CurlyBrace)
+        | Colon
+        | Equals
         | CloseDelim(_)
         | Eof
         | ThinArrow
         | Invalid(_)
-        | Semi => true,
-        OpenDelim(Parenthesis) | Comma | Literal(_) | Colon | Ident(_) | Kw(_) | Equals => false,
-        Whitespace => panic!("Whitespace should be skipped"),
-    }
-}
-
-/// This function must return `true` for the first token of any valid type name.
-/// The behavior otherwise is arbitrary. `true` would lead to a specific error later on,
-/// while `false` would say the type is missing (good for punctuation)
-fn maybe_starts_type(tok: TokenKind) -> bool {
-    match tok {
-        Ident(_) | Literal(_) | Kw(_) | Invalid(_) | Bang | BinOp(_) | OpenDelim(_) => true,
-        Comma | Colon | Equals | Semi | Eof | ThinArrow | CloseDelim(_) => false,
+        | Semi => false,
         Whitespace => panic!("Whitespace should be skipped"),
     }
 }
@@ -750,9 +747,26 @@ mod parser_expr_tests {
             )"#]],
         );
         check_parsing(
-            // TODO-parsing: This is wrong.
             "f(-x)",
-            expect!["At 3: Expected ')' to end function arguments."],
+            expect![[r#"
+                (1-5)call((1)Ident("f"))(
+                    (3-4)Unary[Neg(3)](
+                        (4)Ident("x"),
+                    ),
+                )"#]],
+        );
+        check_parsing(
+            "f(if(x)y else z)",
+            expect![[r#"
+                (1-16)call((1)Ident("f"))(
+                    (3-15)If {
+                        cond: (6)Ident("x"),
+                        true: (8)Ident("y"),
+                        false: Some(
+                            (15)Ident("z"),
+                        ),
+                    },
+                )"#]],
         );
         check_parsing(
             "!f(x)",
@@ -1028,10 +1042,10 @@ mod parser_expr_tests {
         check_parsing(
             "f(x,y,)",
             expect![[r#"
-            (1-7)call((1)Ident("f"))(
-                (3)Ident("x"),
-                (5)Ident("y"),
-            )"#]],
+                (1-7)call((1)Ident("f"))(
+                    (3)Ident("x"),
+                    (5)Ident("y"),
+                )"#]],
         );
     }
 
@@ -1051,7 +1065,7 @@ mod parser_expr_tests {
         );
         check_parsing(
             "f(x:)",
-            expect!["At 4: Expected ',' after function argument."],
+            expect!["At 4: Expected ')' to end function arguments."],
         );
         check_parsing(
             "f(x ;",

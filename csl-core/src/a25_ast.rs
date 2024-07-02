@@ -127,8 +127,6 @@ pub(crate) enum ExprInner {
     /// Literal, such as a number `1`.
     Literal(Lit),
     /// Identifier like `x`.
-    // TODO: store these as indexes to learn about interning and arenas
-    // See Rust's InternerInner in rustc_span.
     IdentExpr(String),
     /// Function definition
     FnDefinition(FunctionDefinition),

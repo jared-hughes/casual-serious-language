@@ -8,27 +8,42 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 ## Next Steps
 
+Features (expected)
+
 - Add mutable variables, making if-without-else useful.
-- Remove TODOs from source files, and move them here.
-- Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.
 - Allow type hints on variables.
 - Literals `true` and `false`.
 - `return` keyword as described in syntax.md.
+- Allow `let` and `ret` as expressions.
 - `never` type to properly type "return"
+- Chaining comparison operations
+
+High-effort enhancements
+
+- Compile portions of the code better (don't stop on the first err, allow for error nodes / IPs)
+- Find some way to guarantee all error messages are tested.
+- Try symbol/string interning. See Rust's `InternerInner` in rustc_span.
+- Compile to an actual target. (E.g. via [QBE](https://github.com/garritfra/qbe-rs))
+- Severity and suggestions for diagnostics.
+
+Other enhancements
+
+- (Maybe) Panic for runtime errors instead of propagating `Result`.
 - Say "Syntax Error" etc in error messages. Maybe set this up as a category on the diagnostic object?
 - Codemirror in the web preview, to underline errors.
   - Ctrl-Enter to run code.
-- Figure how to type consequent parsing better. (macros?)
-- Compile portions of the code better (don't stop on the first err, allow for error nodes / IPs)
-- Better Symbol table handling (ugly inside `a35_mir` rn.)
-- Find some way to guarantee all error messages are tested.
-- Panic for runtime errors instead of propagating `Result`.
-- Generalize scanning for comma-separated things (function params, function args).
-- Try symbol/string interning
-- Change `/` to true division, add `//` for floor division
-- Chaining comparison operations
+- `TODO-errormsg` and `TODO-perf` in the code.
 
-Maybe sometime: Compile instead of interpret
+Bug fixes
+
+- Change `/` to true division, add `//` for floor division
+
+Code cleanups
+
+- Proper lexer errors instead of `InvalidToken` storing a static string.
+- Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.
+- Figure how to type consequent parsing better. (macros?)
+- Generalize scanning for comma-separated things (function params, function args).
 
 ## Guiding Principles
 
@@ -58,6 +73,12 @@ To run on a particular file
 ```sh
 cargo run filename.csl
 ```
+
+Policy: do not add a `// TODO` comment unless it is one of the following types:
+
+- `TODO-errormsg`: A comment on a test with a worse-than-expected error message
+- `TODO-perf`: A comment explaining an idea for how to improve performance
+- `TODO-test`: A gap in the testing.
 
 ## Build for Web
 

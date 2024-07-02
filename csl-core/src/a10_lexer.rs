@@ -215,7 +215,6 @@ impl<'a> RawLexer<'a> {
                 _ => invalid("Bitwise OR ('|') is not yet supported."),
             },
 
-            // TODO: actually say what the character is.
             _ => invalid("Unrecognized character."),
         };
         let len = self.len();

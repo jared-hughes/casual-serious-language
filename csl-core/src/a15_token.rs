@@ -105,7 +105,6 @@ pub(crate) enum TokenKind<'a> {
     Invalid(InvalidToken),
 }
 
-// TODO: more standard error handling here.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct InvalidToken {
     pub(crate) msg: &'static str,

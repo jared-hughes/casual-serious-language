@@ -150,7 +150,7 @@ mod interpret_expr_tests {
         check_interpret_mir("1 / 2", expect!["I64(0)"]);
     }
 
-    // TODO: negatives and saturation/wrapping
+    // TODO-test: negatives and saturation/wrapping
     #[test]
     fn division_is_floor() {
         check_interpret_mir("7/4", expect!["I64(1)"]);
@@ -265,7 +265,6 @@ mod interpret_stmt_tests {
 
     #[test]
     fn incorrect_main() {
-        // TODO: We have no distinction between compiling and linking.
         check_interpret_mir(
             "fn main(x: i64) -> i64 { ret 1+2; }",
             expect!["At (!1,1!): Incorrect args to function 'main"],
