@@ -30,6 +30,9 @@ pub(crate) mod runtime_value;
 pub(crate) mod span;
 #[path = "a29_symbol_table.rs"]
 pub(crate) mod symbol_table;
+#[cfg(test)]
+#[path = "test_helpers.rs"]
+pub(crate) mod test_helpers;
 #[path = "a15_token.rs"]
 pub(crate) mod token;
 #[path = "a34_types.rs"]

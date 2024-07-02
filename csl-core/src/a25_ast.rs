@@ -33,8 +33,10 @@ pub(crate) enum BinOpKind {
     Sub,
     /// Multiplication (`*`)
     Mul,
-    /// Division (`/`)
-    Div,
+    /// True division (`/`)
+    TrueDiv,
+    /// Floor division (`//`)
+    FloorDiv,
 }
 
 impl fmt::Display for BinOpKind {
@@ -45,7 +47,8 @@ impl fmt::Display for BinOpKind {
             Add => "+",
             Sub => "-",
             Mul => "*",
-            Div => "/",
+            TrueDiv => "/",
+            FloorDiv => "/",
             Compare(Lt) => "<",
             Compare(LtEq) => "<=",
             Compare(Gt) => ">",

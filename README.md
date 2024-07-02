@@ -36,7 +36,7 @@ Other enhancements
 
 Bug fixes
 
-- Change `/` to true division, add `//` for floor division
+- None noted.
 
 Code cleanups
 
@@ -44,6 +44,7 @@ Code cleanups
 - Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.
 - Figure how to type consequent parsing better. (macros?)
 - Generalize scanning for comma-separated things (function params, function args).
+- Move `assert_panic`.
 
 ## Guiding Principles
 

@@ -103,10 +103,12 @@ impl<'prog> Interpreter<'prog> {
 
 #[cfg(test)]
 mod interpret_expr_tests {
+    use crate::test_helpers::assert_panic;
+
     use super::*;
     use expect_test::{expect, Expect};
 
-    fn check_interpret_mir(input: &str, expect: Expect) {
+    fn run_mir_expr(input: &str) -> RuntimeResult {
         let program = if !input.contains('{') {
             let ty = match () {
                 () if input.contains('<') => "bool",
@@ -119,7 +121,11 @@ mod interpret_expr_tests {
         } else {
             input.to_owned()
         };
-        let actual = match compile_and_interpret(&program) {
+        compile_and_interpret(&program)
+    }
+
+    fn check_interpret_mir(input: &str, expect: Expect) {
+        let actual = match run_mir_expr(input) {
             Ok(mir) => format!("{:?}", mir),
             Err(diag) => format!("{:#?}", diag),
         };
@@ -128,7 +134,7 @@ mod interpret_expr_tests {
 
     #[test]
     fn smoke_test() {
-        check_interpret_mir("12*3+8/4-2", expect!["I64(36)"]);
+        check_interpret_mir("12*3+8//4-2", expect!["I64(36)"]);
     }
 
     #[test]
@@ -147,13 +153,56 @@ mod interpret_expr_tests {
         check_interpret_mir("1.0 * 2.0", expect!["F64(2.0)"]);
         check_interpret_mir("1 * 2", expect!["I64(2)"]);
         check_interpret_mir("1.0 / 2.0", expect!["F64(0.5)"]);
-        check_interpret_mir("1 / 2", expect!["I64(0)"]);
+        check_interpret_mir("1.0 // 2.0", expect!["F64(0.0)"]);
+        check_interpret_mir("1 // 2", expect!["I64(0)"]);
     }
 
-    // TODO-test: negatives and saturation/wrapping
     #[test]
-    fn division_is_floor() {
-        check_interpret_mir("7/4", expect!["I64(1)"]);
+    fn floor_div_i64() {
+        check_interpret_mir("8//4", expect!["I64(2)"]);
+        check_interpret_mir("(-8)//4", expect!["I64(-2)"]);
+        check_interpret_mir("8//(-4)", expect!["I64(-2)"]);
+        check_interpret_mir("(-8)//(-4)", expect!["I64(2)"]);
+        check_interpret_mir("7//4", expect!["I64(1)"]);
+        check_interpret_mir("(-7)//4", expect!["I64(-2)"]);
+        check_interpret_mir("7//(-4)", expect!["I64(-2)"]);
+        check_interpret_mir("(-7)//(-4)", expect!["I64(1)"]);
+    }
+
+    #[test]
+    fn div_by_zero() {
+        assert_panic!(run_mir_expr("8//0"), "attempt to divide by zero");
+        assert_panic!(run_mir_expr("0//0"), "attempt to divide by zero");
+        assert_panic!(run_mir_expr("(-8)//0"), "attempt to divide by zero");
+    }
+
+    #[test]
+    fn floor_div_f64() {
+        check_interpret_mir("8.0//4.0", expect!["F64(2.0)"]);
+        check_interpret_mir("(-8.0)//4.0", expect!["F64(-2.0)"]);
+        check_interpret_mir("8.0//(-4.0)", expect!["F64(-2.0)"]);
+        check_interpret_mir("(-8.0)//(-4.0)", expect!["F64(2.0)"]);
+        check_interpret_mir("7.0//4.0", expect!["F64(1.0)"]);
+        check_interpret_mir("(-7.0)//4.0", expect!["F64(-2.0)"]);
+        check_interpret_mir("7.0//(-4.0)", expect!["F64(-2.0)"]);
+        check_interpret_mir("(-7.0)//(-4.0)", expect!["F64(1.0)"]);
+        check_interpret_mir(
+            "9999999999.0//0.00000000001",
+            expect!["F64(9.999999999e20)"],
+        );
+        check_interpret_mir("0.0//0.0", expect!["F64(NaN)"]);
+        check_interpret_mir("1.0//0.0", expect!["F64(inf)"]);
+        check_interpret_mir("(-1.0)//0.0", expect!["F64(-inf)"]);
+    }
+
+    #[test]
+    fn true_div_f64() {
+        check_interpret_mir("(-8.0)/2.0", expect!["F64(-4.0)"]);
+        check_interpret_mir("5.0/3.5", expect!["F64(1.4285714285714286)"]);
+        check_interpret_mir("9999999999.0/0.00000000001", expect!["F64(9.999999999e20)"]);
+        check_interpret_mir("0.0/0.0", expect!["F64(NaN)"]);
+        check_interpret_mir("1.0/0.0", expect!["F64(inf)"]);
+        check_interpret_mir("(-1.0)/0.0", expect!["F64(-inf)"]);
     }
 
     #[test]

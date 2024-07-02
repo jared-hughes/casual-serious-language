@@ -40,6 +40,8 @@ pub(crate) enum BinOpToken {
     Star,
     /// `/`
     Slash,
+    /// `//`
+    FloorDiv,
 }
 
 pub(crate) use Delimiter::*;

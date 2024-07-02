@@ -7,8 +7,10 @@ Numbers and stuff
 - Integer literals: `12`, `1e3` (currently these are 64-bit signed)
 - Float literals: `1.0`, `1.2e3`, `1.2e-4` (these are 64-bit floats)
 - Add/subtract/multiply: `1 + 2`, `1 - 2`, `1 * 2`
-- Divide: `1 / 2`
-  - It is floor division for integers and truncated division for floats. Planned: pull a Python and make `/` consistently true division, and `//` consistently floor division.
+- True divide: `3.0 / 2.0`
+  - `/` always produces the output with no rounding besides the rounding inherent in the bit representation (floating point).
+- Floor divide: `3 // 2`
+  - Floor division rounds to negative infinity, matching the semantics of Python (the semantics are different than Rust's `div_euclid`)
 - Unary negative: `-2`
 
 Booleans

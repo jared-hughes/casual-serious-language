@@ -475,7 +475,7 @@ impl FnBody {
             (Add, I64, I64) => OP2::AddI64,
             (Sub, I64, I64) => OP2::SubI64,
             (Mul, I64, I64) => OP2::MulI64,
-            (Div, I64, I64) => OP2::DivI64,
+            (FloorDiv, I64, I64) => OP2::FloorDivI64,
             (Compare(Lt), I64, I64) => OP2::LtI64,
             (Compare(LtEq), I64, I64) => OP2::LtEqI64,
             (Compare(Gt), I64, I64) => OP2::GtI64,
@@ -486,7 +486,8 @@ impl FnBody {
             (Add, F64, F64) => OP2::AddF64,
             (Sub, F64, F64) => OP2::SubF64,
             (Mul, F64, F64) => OP2::MulF64,
-            (Div, F64, F64) => OP2::DivF64,
+            (TrueDiv, F64, F64) => OP2::TrueDivF64,
+            (FloorDiv, F64, F64) => OP2::FloorDivF64,
             (Compare(Lt), F64, F64) => OP2::LtF64,
             (Compare(LtEq), F64, F64) => OP2::LtEqF64,
             (Compare(Gt), F64, F64) => OP2::GtF64,
@@ -614,17 +615,27 @@ mod build_mir_expr_block {
                 BP(0): BasicBlock
                   IP(0) = Literal(F64(1.0))
                   IP(1) = Literal(F64(2.0))
-                  IP(2) = Binary(DivF64, IP(0), IP(1))
+                  IP(2) = Binary(TrueDivF64, IP(0), IP(1))
                   Return(IP(2))
             "#]],
         );
         check_build_mir(
-            "1 / 2",
+            "1.0 // 2.0",
+            expect![[r#"
+                BP(0): BasicBlock
+                  IP(0) = Literal(F64(1.0))
+                  IP(1) = Literal(F64(2.0))
+                  IP(2) = Binary(FloorDivF64, IP(0), IP(1))
+                  Return(IP(2))
+            "#]],
+        );
+        check_build_mir(
+            "1 // 2",
             expect![[r#"
                 BP(0): BasicBlock
                   IP(0) = Literal(I64(1))
                   IP(1) = Literal(I64(2))
-                  IP(2) = Binary(DivI64, IP(0), IP(1))
+                  IP(2) = Binary(FloorDivI64, IP(0), IP(1))
                   Return(IP(2))
             "#]],
         );
@@ -700,6 +711,10 @@ mod build_mir_expr_block {
         check_build_mir(
             "1.0 / 2",
             expect!["At 25: Type error: Cannot perform f64 / i64"],
+        );
+        check_build_mir(
+            "1 / 2",
+            expect!["At 23: Type error: Cannot perform i64 / i64"],
         );
         check_build_mir(
             "1 / 2.0",
@@ -966,23 +981,7 @@ mod build_mir_functions {
         check_build_mir(
             "fn f() -> i64 { ret 12*3+8/4; }
             fn main() -> i64 { ret f(); }",
-            expect![[r#"
-                fn f:
-                BP(0): BasicBlock
-                  IP(0) = Literal(I64(12))
-                  IP(1) = Literal(I64(3))
-                  IP(2) = Binary(MulI64, IP(0), IP(1))
-                  IP(3) = Literal(I64(8))
-                  IP(4) = Literal(I64(4))
-                  IP(5) = Binary(DivI64, IP(3), IP(4))
-                  IP(6) = Binary(AddI64, IP(2), IP(5))
-                  Return(IP(6))
-
-                fn main:
-                BP(0): BasicBlock
-                  IP(0) = FnCall("f", [])
-                  Return(IP(0))
-            "#]],
+            expect!["At 27: Type error: Cannot perform i64 / i64"],
         );
     }
 
@@ -1000,14 +999,7 @@ mod build_mir_functions {
         );
         check_build_mir(
             "fn f(y: i64, x: i64) -> i64 { ret (x/y)+(y/x); }",
-            expect![[r#"
-                fn f:
-                BP(0): BasicBlock
-                  IP(2) = Binary(DivI64, IP(1), IP(0))
-                  IP(3) = Binary(DivI64, IP(0), IP(1))
-                  IP(4) = Binary(AddI64, IP(2), IP(3))
-                  Return(IP(4))
-            "#]],
+            expect!["At 37: Type error: Cannot perform i64 / i64"],
         );
         check_build_mir(
             "fn f(f: i64) -> i64 { ret f; };",

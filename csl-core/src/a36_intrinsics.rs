@@ -92,8 +92,9 @@ SubI64 => fn sub_i64(a=av: I64, b=bv: I64) -> I64 {
 MulI64 => fn mul_i64(a=av: I64, b=bv: I64) -> I64 {
     a * b
 }
-DivI64 => fn div_i64(a=av: I64, b=bv: I64) -> I64 {
-    a / b
+FloorDivI64 => fn floordiv_i64(a=av: I64, b=bv: I64) -> I64 {
+    if b < 0 { (-a).div_euclid(-b) }
+    else { a.div_euclid(b) }
 }
 LtI64 => fn lt_i64(a=av: I64, b=bv: I64) -> Bool {
     a < b
@@ -124,8 +125,11 @@ SubF64 => fn sub_f64(a=av: F64, b=bv: F64) -> F64 {
 MulF64 => fn mul_f64(a=av: F64, b=bv: F64) -> F64 {
     a * b
 }
-DivF64 => fn div_f64(a=av: F64, b=bv: F64) -> F64 {
+TrueDivF64 => fn truediv_f64(a=av: F64, b=bv: F64) -> F64 {
     a / b
+}
+FloorDivF64 => fn floordiv_f64(a=av: F64, b=bv: F64) -> F64 {
+    (a / b).floor()
 }
 LtF64 => fn lt_f64(a=av: F64, b=bv: F64) -> Bool {
     a < b

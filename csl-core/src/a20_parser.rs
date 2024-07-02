@@ -427,7 +427,7 @@ impl<'a> Parser<'a> {
 fn binop_power(t: BinOpToken) -> BindingPower {
     match t {
         Plus | Minus => BindingPower::Add,
-        Star | Slash => BindingPower::Mul,
+        Star | Slash | FloorDiv => BindingPower::Mul,
         Lt | LtEq | Gt | GtEq | Neq | EqEq => BindingPower::Compare,
         And => BindingPower::And,
         Or => BindingPower::Or,
@@ -447,7 +447,8 @@ fn translate_binop(t: BinOpToken) -> ast::BinOpKind {
         Plus => ast::Add,
         Minus => ast::Sub,
         Star => ast::Mul,
-        Slash => ast::Div,
+        Slash => ast::TrueDiv,
+        FloorDiv => ast::FloorDiv,
     }
 }
 
@@ -540,7 +541,7 @@ mod parser_expr_tests {
         check_parsing(
             "1/2",
             expect![[r#"
-                (1-3)Binary[Div(2)](
+                (1-3)Binary[TrueDiv(2)](
                     (1)Literal(Integer(1)),
                     (3)Literal(Integer(2)),
                 )"#]],
@@ -712,16 +713,30 @@ mod parser_expr_tests {
         check_parsing(
             "x / y - z / w",
             expect![[r#"
-            (1-13)Binary[Sub(7)](
-                (1-5)Binary[Div(3)](
-                    (1)Ident("x"),
-                    (5)Ident("y"),
-                ),
-                (9-13)Binary[Div(11)](
-                    (9)Ident("z"),
-                    (13)Ident("w"),
-                ),
-            )"#]],
+                (1-13)Binary[Sub(7)](
+                    (1-5)Binary[TrueDiv(3)](
+                        (1)Ident("x"),
+                        (5)Ident("y"),
+                    ),
+                    (9-13)Binary[TrueDiv(11)](
+                        (9)Ident("z"),
+                        (13)Ident("w"),
+                    ),
+                )"#]],
+        );
+        check_parsing(
+            "x // y - z // w",
+            expect![[r#"
+                (1-15)Binary[Sub(8)](
+                    (1-6)Binary[FloorDiv(3-4)](
+                        (1)Ident("x"),
+                        (6)Ident("y"),
+                    ),
+                    (10-15)Binary[FloorDiv(12-13)](
+                        (10)Ident("z"),
+                        (15)Ident("w"),
+                    ),
+                )"#]],
         );
         // Mul < Prefix
         check_parsing(
@@ -883,35 +898,46 @@ mod parser_expr_tests {
         check_parsing(
             "x * y / z",
             expect![[r#"
-            (1-9)Binary[Div(7)](
-                (1-5)Binary[Mul(3)](
-                    (1)Ident("x"),
-                    (5)Ident("y"),
-                ),
-                (9)Ident("z"),
-            )"#]],
+                (1-9)Binary[TrueDiv(7)](
+                    (1-5)Binary[Mul(3)](
+                        (1)Ident("x"),
+                        (5)Ident("y"),
+                    ),
+                    (9)Ident("z"),
+                )"#]],
         );
         check_parsing(
             "x / y * z",
             expect![[r#"
-            (1-9)Binary[Mul(7)](
-                (1-5)Binary[Div(3)](
-                    (1)Ident("x"),
-                    (5)Ident("y"),
-                ),
-                (9)Ident("z"),
-            )"#]],
+                (1-9)Binary[Mul(7)](
+                    (1-5)Binary[TrueDiv(3)](
+                        (1)Ident("x"),
+                        (5)Ident("y"),
+                    ),
+                    (9)Ident("z"),
+                )"#]],
         );
         check_parsing(
             "x / y / z",
             expect![[r#"
-            (1-9)Binary[Div(7)](
-                (1-5)Binary[Div(3)](
-                    (1)Ident("x"),
-                    (5)Ident("y"),
-                ),
-                (9)Ident("z"),
-            )"#]],
+                (1-9)Binary[TrueDiv(7)](
+                    (1-5)Binary[TrueDiv(3)](
+                        (1)Ident("x"),
+                        (5)Ident("y"),
+                    ),
+                    (9)Ident("z"),
+                )"#]],
+        );
+        check_parsing(
+            "x // y // z",
+            expect![[r#"
+                (1-11)Binary[FloorDiv(8-9)](
+                    (1-6)Binary[FloorDiv(3-4)](
+                        (1)Ident("x"),
+                        (6)Ident("y"),
+                    ),
+                    (11)Ident("z"),
+                )"#]],
         );
         check_parsing(
             "x * y * z",
@@ -949,7 +975,7 @@ mod parser_expr_tests {
             expect![[r#"
                 (1-25)Binary[Add(3)](
                     (1)Ident("x"),
-                    (5-25)Binary[Div(21)](
+                    (5-25)Binary[TrueDiv(21)](
                         (5-19)Binary[Mul(15)](
                             (5-13)paren@(6-12)Binary[Add(8)](
                                 (6)Literal(Integer(2)),

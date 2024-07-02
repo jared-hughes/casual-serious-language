@@ -149,7 +149,6 @@ impl<'a> RawLexer<'a> {
                 _ => BinOp(Minus),
             },
             '*' => BinOp(Star),
-            '/' => BinOp(Slash),
             '(' => OpenDelim(Parenthesis),
             ')' => CloseDelim(Parenthesis),
             '{' => OpenDelim(CurlyBrace),
@@ -157,6 +156,13 @@ impl<'a> RawLexer<'a> {
             ',' => Comma,
             ':' => Colon,
             ';' => Semi,
+            '/' => match self.peek() {
+                '/' => {
+                    self.consume();
+                    BinOp(FloorDiv)
+                }
+                _ => BinOp(Slash),
+            },
             '!' => match self.peek() {
                 '=' => {
                     self.consume();
@@ -366,7 +372,7 @@ mod lexer_tests {
     #[test]
     fn smoke_test() {
         check_lexing(
-            "x + 2 + abc * def() / 456",
+            "x + 2 + abc * def() / 456.0 + 5 // 2",
             expect![[r#"
                 Ident("x") [len=1]
                 BinOp(Plus) [len=1]
@@ -378,7 +384,11 @@ mod lexer_tests {
                 OpenDelim(Parenthesis) [len=1]
                 CloseDelim(Parenthesis) [len=1]
                 BinOp(Slash) [len=1]
-                Literal(Integer(456)) [len=3]
+                Literal(Float(456.0)) [len=5]
+                BinOp(Plus) [len=1]
+                Literal(Integer(5)) [len=1]
+                BinOp(FloorDiv) [len=2]
+                Literal(Integer(2)) [len=1]
             "#]],
         );
     }
@@ -471,7 +481,7 @@ mod lexer_tests {
             "#]],
         );
         check_lexing(
-            "(-x)/{},:;->-+():1",
+            "(-x)/{},:;->//-+():1",
             expect![[r#"
                 OpenDelim(Parenthesis) [len=1]
                 BinOp(Minus) [len=1]
@@ -484,6 +494,7 @@ mod lexer_tests {
                 Colon [len=1]
                 Semi [len=1]
                 ThinArrow [len=2]
+                BinOp(FloorDiv) [len=2]
                 BinOp(Minus) [len=1]
                 BinOp(Plus) [len=1]
                 OpenDelim(Parenthesis) [len=1]
