@@ -126,11 +126,10 @@ fn needs_semi(stmt: &ast::Statement) -> bool {
 fn expr_needs_semi(expr: &ast::Expr) -> bool {
     match &expr.body {
         ast::ExprInner::FnDefinition(_) => false,
-        ast::ExprInner::If(_cond, if_branch, else_branch) => match else_branch {
-            Some(eb) => expr_needs_semi(eb),
-            None => expr_needs_semi(if_branch),
-        },
         ast::ExprInner::Block(_) => false,
+        ast::ExprInner::If(_cond, if_branch, None) => expr_needs_semi(if_branch),
+        ast::ExprInner::If(_cond, _if, Some(else_branch)) => expr_needs_semi(else_branch),
+        ast::ExprInner::While(_cond, body) => expr_needs_semi(body),
         _ => true,
     }
 }
@@ -273,6 +272,7 @@ impl<'a> Parser<'a> {
             Kw(Fn) => self.parse_fn(start),
             OpenDelim(CurlyBrace) => self.parse_block(start),
             Kw(If) => self.parse_if(start),
+            Kw(While) => self.parse_while(start),
             Bang => {
                 let inner = self.parse_main(BindingPower::Prefix)?;
                 let unop = respan(ast::UnaryOpKind::Not, start.span);
@@ -490,6 +490,19 @@ impl<'a> Parser<'a> {
         };
         let s = span(if_token.span.lo, hi);
         Ok(expr(ast::If(cond, true_branch, false_branch), s))
+    }
+
+    fn parse_while(&mut self, while_token: Token) -> ExprResult {
+        // (
+        consume_token!(self, OpenDelim(Parenthesis), PE::IfExpOpenParen);
+        // x > 2
+        let cond = self.parse_expr()?;
+        // )
+        consume_token!(self, CloseDelim(Parenthesis), PE::IfExpCloseParen);
+        // body
+        let body = self.parse_expr()?;
+        let s = span(while_token.span.lo, body.span.hi);
+        Ok(expr(ast::While(cond, body), s))
     }
 
     fn parse_lhs(&mut self) -> Result<ast::LetLHS, Diag> {
@@ -1342,6 +1355,64 @@ mod parser_expr_tests {
                 )"#]],
         );
     }
+
+    #[test]
+    fn while_expr_errors() {
+        check_parsing(
+            "while x>2 {1}",
+            expect!["At 7: Expected '(' for condition of 'if' statement. For example: `if (x > 5) 1 else 0`."],
+        );
+        check_parsing(
+            "while (x>2 {1}",
+            expect!["At 12: Expected ')' to close condition of 'if' statement. For example: `if (x > 5) 1 else 0`."],
+        );
+        check_parsing(
+            "while () 1",
+            // TODO-errormsg: Better message here
+            expect!["At 8: What's this ')' doing here? I don't see a '('"],
+        );
+        check_parsing("{ while(x); }", expect!["At 11: Unexpected token."]);
+    }
+
+    #[test]
+    fn while_expr() {
+        check_parsing(
+            "while (x > 0) x = x - 1",
+            expect![[r#"
+                (1-23)While {
+                    cond: (8-12)Binary[Compare(Gt)(10)](
+                        (8)Ident("x"),
+                        (12)Literal(Integer(0)),
+                    ),
+                    body: (15-23)Assign {
+                        ident: (15)Ident("x"),
+                        expr: (19-23)Binary[Sub(21)](
+                            (19)Ident("x"),
+                            (23)Literal(Integer(1)),
+                        ),
+                    },
+                }"#]],
+        );
+        check_parsing(
+            "while (x > 0) { x = x - 1; }",
+            expect![[r#"
+                (1-28)While {
+                    cond: (8-12)Binary[Compare(Gt)(10)](
+                        (8)Ident("x"),
+                        (12)Literal(Integer(0)),
+                    ),
+                    body: (15-28)Block{
+                        (17-25)Assign {
+                            ident: (17)Ident("x"),
+                            expr: (21-25)Binary[Sub(23)](
+                                (21)Ident("x"),
+                                (25)Literal(Integer(1)),
+                            ),
+                        },
+                    },
+                }"#]],
+        );
+    }
 }
 
 #[cfg(test)]
@@ -1478,6 +1549,10 @@ mod parser_fn_tests {
             "if(y){5;}else 4 3;",
             expect!["At 17: Expected semicolon to end the statement"],
         );
+        check_parsing(
+            "while(x) y 3",
+            expect!["At 12: Expected semicolon to end the statement"],
+        );
     }
 
     #[test]
@@ -1526,6 +1601,18 @@ mod parser_fn_tests {
                     ),
                 }
                 (35)Literal(Integer(3))
+            "#]],
+        );
+        check_parsing(
+            "while(x) {4;} 3;",
+            expect![[r#"
+                (1-13)While {
+                    cond: (7)Ident("x"),
+                    body: (10-13)Block{
+                        (11)Literal(Integer(4)),
+                    },
+                }
+                (15)Literal(Integer(3))
             "#]],
         );
     }

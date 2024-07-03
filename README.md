@@ -34,12 +34,13 @@ High-effort enhancements
 
 Other enhancements
 
-- Pass down a `used` boolean that avoids bloating the IR with a bunch of unit literals.
-  - Or maybe instead an `enum Usage { Discarded, Used(ip), Unknown }` to also avoid a bunch of `Use()`
 - (Maybe) Panic for runtime errors instead of propagating `Result`.
 - Say "Syntax Error" etc in error messages. Maybe set this up as a category on the diagnostic object?
 - `TODO-errormsg` and `TODO-perf` in the code.
 - Reserved words to disallow some names like `union` or `yeet`.
+- Pass down a `used` boolean that avoids bloating the IR with a bunch of unit literals.
+  - Or maybe instead an `enum Usage { Discarded, Used(ip), Unknown }` to also avoid a bunch of `Use()`
+  - See branch `usage-ret`. This would be much easier with a Typed AST.
 
 Projects
 
@@ -54,6 +55,7 @@ Bug fixes
 
 Code cleanups
 
+- `#[must_use]` on the `(BP,IP)` pair, not on the functions (which must be used anyways, as a matter of `Result`)
 - `FnDefinition` at statement-level
 - Proper lexer errors instead of `InvalidToken` storing a static string.
 - Determine types _before_ adding to MIR. Big mess checking for types inside build_mir.

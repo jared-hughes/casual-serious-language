@@ -432,6 +432,49 @@ impl Ctx<'_> {
                 // Reconstruct value back to output branch
                 self.join_if_else_returns(value_type, if_bi, else_bi)
             }
+            While(cond_node, body_node) => {
+                // Setup condition block
+                let cond_block = self.body.new_basic_block();
+                self.body
+                    .set_terminator(block, mir::Goto { target: cond_block });
+                // Setup body block
+                let body_block = self.body.new_basic_block();
+                let (body_block_end, body_ip) = self.add_expr(body_block, body_node)?;
+                {
+                    let body_type = self.body.get_type(body_ip);
+                    if body_type != Unit {
+                        err(ME::WhileBodyNotUnit {
+                            span: cond_node.span,
+                            body_type,
+                        })?;
+                    }
+                }
+                self.body
+                    .set_terminator(body_block_end, mir::Goto { target: cond_block });
+                // Setup output block
+                let out_block = self.body.new_basic_block();
+                // Branch from condition block
+                let (cond_block_end, cond_ip) = self.add_expr(cond_block, cond_node)?;
+                {
+                    let cond_type = self.body.get_type(cond_ip);
+                    if cond_type != Bool {
+                        err(ME::WrongWhileConditionType {
+                            span: cond_node.span,
+                            cond_type,
+                        })?;
+                    }
+                }
+                self.body.set_terminator(
+                    cond_block_end,
+                    mir::If {
+                        cond: cond_ip,
+                        true_branch: body_block,
+                        false_branch: out_block,
+                    },
+                );
+                // Return unit from output block
+                self.body.push_unit_new_ip(out_block, DUMMY_SPAN)
+            }
         })
     }
 
@@ -1343,6 +1386,73 @@ mod build_mir_functions {
 
                 BP(6): BasicBlock
                   Return(IP(15))
+            "#]],
+        );
+    }
+
+    #[test]
+    fn while_errors() {
+        check_build_mir(
+            "fn f() -> i64 {
+                let mut n = 10;
+                let x = while (n > 0) { n = n - 1; };
+                ret x + 1;
+            }",
+            expect!["At 125: Type error: Cannot perform () + i64"],
+        );
+        check_build_mir(
+            "fn f() -> i64 {
+                let mut n = 10;
+                while (n > 0) { ret 3; };
+            }",
+            // TODO-errormsg: point to the `ret` specifically.
+            expect!["At 72-76: Expected 'while' body to not `ret` any value, but it returns type 'i64'."],
+        );
+    }
+
+    #[test]
+    fn fibonacci_while() {
+        check_build_mir(
+            "fn f(n: i64) -> i64 {
+                let mut i = 0;
+                let mut a = 1;
+                let mut b = 1;
+                while (i < n) {
+                  i = i + 1;
+                  b = b + a;
+                  a = b - a;
+                }
+                ret a;
+            }",
+            expect![[r#"
+                fn f:
+                BP(0): BasicBlock
+                  IP(1) = Literal(I64(0))
+                  IP(2) = Literal(I64(1))
+                  IP(3) = Literal(I64(1))
+                  Goto { target: BP(1) }
+
+                BP(1): BasicBlock
+                  IP(12) = Binary(LtI64, IP(1), IP(0))
+                  If { cond: IP(12), true_branch: BP(2), false_branch: BP(3) }
+
+                BP(2): BasicBlock
+                  IP(4) = Literal(I64(1))
+                  IP(5) = Binary(AddI64, IP(1), IP(4))
+                  IP(1) = Use(IP(5))
+                  IP(6) = Literal(UnitValue)
+                  IP(7) = Binary(AddI64, IP(3), IP(2))
+                  IP(3) = Use(IP(7))
+                  IP(8) = Literal(UnitValue)
+                  IP(9) = Binary(SubI64, IP(3), IP(2))
+                  IP(2) = Use(IP(9))
+                  IP(10) = Literal(UnitValue)
+                  IP(11) = Literal(UnitValue)
+                  Goto { target: BP(1) }
+
+                BP(3): BasicBlock
+                  IP(13) = Literal(UnitValue)
+                  Return(IP(2))
             "#]],
         );
     }

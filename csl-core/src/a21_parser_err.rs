@@ -7,6 +7,7 @@ const EXAMPLE_FN: &str = "For example: `fn add(x: u64, y: u64) -> u64 { x + y }`
 const EXAMPLE_LET: &str = "For example: `let x = 5;`";
 const EXAMPLE_ASSIGN: &str = "For example: `x = 5;`";
 const EXAMPLE_IF: &str = "For example: `if (x > 5) 1 else 0`.";
+const EXAMPLE_WHILE: &str = "For example: `while (x > 5) x = x - 5;`.";
 
 def_token_errors! {
 ExpectedConsequent => format!("Unexpected token here. A binary operator like + may be preferred."),
@@ -35,6 +36,12 @@ IfExpOpenParen => {
 },
 IfExpCloseParen => {
     format!("Expected ')' to close condition of 'if' statement. {EXAMPLE_IF}")
+},
+WhileExpOpenParen => {
+    format!("Expected '(' for condition of 'if' statement. {EXAMPLE_WHILE}")
+},
+WhileExpCloseParen => {
+    format!("Expected ')' to close condition of 'if' statement. {EXAMPLE_WHILE}")
 },
 ExpType => {
     "Expected a type here. Try 'i64' or '()'.".to_string()

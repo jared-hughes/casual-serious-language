@@ -68,6 +68,8 @@ pub(crate) enum Keyword {
     Else,
     /// 'mut'
     Mut,
+    /// 'while'
+    While,
 }
 
 pub(crate) use TokenKind::*;

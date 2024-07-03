@@ -109,6 +109,7 @@ Semicolons can be omitted after a bare statement (i.e. no `ret` or `let`) whose 
 - a function definition (which ends in `}`), or
 - a block (which ends in `}`), or
 - an if or if-else expression whose final branch is a block.
+- a `while` expression whose body is a block.
 
 ## `return` keyword (not yet implemented)
 

@@ -321,7 +321,7 @@ mod interpret_stmt_tests {
     }
 
     #[test]
-    fn fibonacci_recursive() {
+    fn fibonacci_impls() {
         // Exponentially-recursive (since there is no cache)
         check_interpret_mir(
             "fn f(n: i64) -> i64 {
@@ -340,6 +340,22 @@ mod interpret_stmt_tests {
             }
             fn fib(n: i64) -> i64 {
                 ret f(1,0,n);
+            }
+            fn main() -> i64 { ret fib(12); }",
+            expect!["I64(144)"],
+        );
+        // While loop
+        check_interpret_mir(
+            "fn fib(n: i64) -> i64 {
+                let mut i = 1;
+                let mut a = 1;
+                let mut b = 1;
+                while (i < n) {
+                    i = i + 1;
+                    b = b + a;
+                    a = b - a;
+                }
+                ret a;
             }
             fn main() -> i64 { ret fib(12); }",
             expect!["I64(144)"],

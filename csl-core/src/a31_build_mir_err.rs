@@ -200,6 +200,24 @@ msg: self => format!(
         self.if_type
     );
 
+pub(crate) struct WrongWhileConditionType {
+    pub(crate) span: Span,
+    pub(crate) cond_type: Type,
+}
+msg: self => format!(
+        "Expected 'while' to condition on a boolean ('Bool') but got type '{0}'.",
+        self.cond_type
+    );
+
+pub(crate) struct WhileBodyNotUnit {
+    pub(crate) span: Span,
+    pub(crate) body_type: Type,
+}
+msg: self => format!(
+        "Expected 'while' body to not `ret` any value, but it returns type '{0}'.",
+        self.body_type
+    );
+
 pub(crate) struct WrongIfConditionType {
     pub(crate) span: Span,
     pub(crate) cond_type: Type,

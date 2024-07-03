@@ -133,6 +133,8 @@ pub(crate) enum ExprInner {
     FnCall(Box<Expr>, Vec<Expr>),
     /// If expression `if (x > 0) 1 else 0`
     If(Box<Expr>, Box<Expr>, Option<Box<Expr>>),
+    /// While expression `while (x >= 5) x = x - 5;`
+    While(Box<Expr>, Box<Expr>),
     /// Assignment expression `x = 3`
     Assign(Ident, Box<Expr>),
 }
@@ -191,6 +193,11 @@ impl fmt::Debug for ExprInner {
                 .field("cond", cond)
                 .field("true", true_branch)
                 .field("false", false_branch)
+                .finish(),
+            While(cond, body) => f
+                .debug_struct("While")
+                .field("cond", cond)
+                .field("body", body)
                 .finish(),
             Assign(ident, expr) => f
                 .debug_struct("Assign")

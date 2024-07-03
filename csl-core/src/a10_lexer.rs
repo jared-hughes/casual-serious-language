@@ -239,6 +239,7 @@ impl<'a> RawLexer<'a> {
             () if s == "if" => Kw(If),
             () if s == "else" => Kw(Else),
             () if s == "mut" => Kw(Mut),
+            () if s == "while" => Kw(While),
             _ => Ident(s),
         }
     }
@@ -509,13 +510,15 @@ mod lexer_tests {
     #[test]
     fn keywords() {
         check_lexing(
-            "fn ret let if else",
+            "fn ret let if else mut while",
             expect![[r#"
                 Kw(Fn) [len=2]
                 Kw(Ret) [len=3]
                 Kw(Let) [len=3]
                 Kw(If) [len=2]
                 Kw(Else) [len=4]
+                Kw(Mut) [len=3]
+                Kw(While) [len=5]
             "#]],
         );
     }
