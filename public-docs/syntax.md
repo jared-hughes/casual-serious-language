@@ -100,6 +100,16 @@ fn funny_polynomial(x: f64) -> f64 {
 }
 ```
 
+## Semicolons
+
+Semicolons are required in most places to avoid parentheses on the next line from merging and creating a function call, among other reasons.
+
+Semicolons can be omitted after a bare statement (i.e. no `ret` or `let`) whose right-hand-side is:
+
+- a function definition (which ends in `}`), or
+- a block (which ends in `}`), or
+- an if or if-else expression whose final branch is a block.
+
 ## `return` keyword (not yet implemented)
 
 The keyword `ret` determines the value of the block without affecting control flow.

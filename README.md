@@ -38,11 +38,15 @@ Other enhancements
   - Or maybe instead an `enum Usage { Discarded, Used(ip), Unknown }` to also avoid a bunch of `Use()`
 - (Maybe) Panic for runtime errors instead of propagating `Result`.
 - Say "Syntax Error" etc in error messages. Maybe set this up as a category on the diagnostic object?
-- Codemirror in the web preview, to underline errors.
-  - Ctrl-Enter to run code.
 - `TODO-errormsg` and `TODO-perf` in the code.
 - Reserved words to disallow some names like `union` or `yeet`.
-- Insert semicolon (`;`) after final close-curly of if-then and if-then-else.
+
+Projects
+
+- Codemirror in the web preview, to underline errors.
+  - Ctrl-Enter to run code.
+- Auto-formatter.
+  - Allow last statement to not have a trailing `;`, and insert the `;`.
 
 Bug fixes
 

@@ -116,10 +116,21 @@ macro_rules! consume_ident {
     }};
 }
 
-fn needs_semi(ex: &ast::ExprInner) -> bool {
-    #[allow(clippy::match_like_matches_macro)]
-    match ex {
+fn needs_semi(stmt: &ast::Statement) -> bool {
+    let ast::StatementKind::Bare = stmt.kind else {
+        return true;
+    };
+    expr_needs_semi(&stmt.expr)
+}
+
+fn expr_needs_semi(expr: &ast::Expr) -> bool {
+    match &expr.body {
         ast::ExprInner::FnDefinition(_) => false,
+        ast::ExprInner::If(_cond, if_branch, else_branch) => match else_branch {
+            Some(eb) => expr_needs_semi(eb),
+            None => expr_needs_semi(if_branch),
+        },
+        ast::ExprInner::Block(_) => false,
         _ => true,
     }
 }
@@ -143,7 +154,7 @@ impl<'a> Parser<'a> {
             // Parse the main expr.
             let stmt = self.parse_one_stmt()?;
             // ;
-            if needs_semi(&stmt.expr.body) {
+            if needs_semi(&stmt) {
                 consume_token!(self, Semi, PE::ExpectedSemi);
             }
             stmts.push(stmt);
@@ -1419,10 +1430,103 @@ mod parser_fn_tests {
                 )
             "#]],
         );
+    }
+
+    #[test]
+    fn semicolon_required() {
         check_parsing(
-            "let x = 5
-            let y = 6",
-            expect!["At 23-25: Expected semicolon to end the statement"],
+            "let x=5 3;",
+            expect!["At 9: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "let x={} 3;",
+            expect!["At 10: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "let x=if(y)5 3;",
+            expect!["At 14: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "let x=if(y)5 else if(z) 6 else 7 3;",
+            expect!["At 34: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "ret x 3;",
+            expect!["At 7: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "1+2 3;",
+            expect!["At 5: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "-2 3;",
+            expect!["At 4: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "x 3;",
+            expect!["At 3: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "({}) 3;",
+            expect!["At 6: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "if(y)5 3;",
+            expect!["At 8: Expected semicolon to end the statement"],
+        );
+        check_parsing(
+            "if(y){5;}else 4 3;",
+            expect!["At 17: Expected semicolon to end the statement"],
+        );
+    }
+
+    #[test]
+    fn semicolon_optional() {
+        check_parsing(
+            "{x = 5;} 3;",
+            expect![[r#"
+                (1-8)Block{
+                    (2-6)Assign {
+                        ident: (2)Ident("x"),
+                        expr: (6)Literal(Integer(5)),
+                    },
+                }
+                (10)Literal(Integer(3))
+            "#]],
+        );
+        check_parsing(
+            "if(x){ret 5;} 3;",
+            expect![[r#"
+                (1-13)If {
+                    cond: (4)Ident("x"),
+                    true: (6-13)Block{
+                        (7-11) ret (11)Literal(Integer(5)),
+                    },
+                    false: None,
+                }
+                (15)Literal(Integer(3))
+            "#]],
+        );
+        check_parsing(
+            "if(x)4 else if(y) 5 else {ret z;} 3;",
+            expect![[r#"
+                (1-33)If {
+                    cond: (4)Ident("x"),
+                    true: (6)Literal(Integer(4)),
+                    false: Some(
+                        (13-33)If {
+                            cond: (16)Ident("y"),
+                            true: (19)Literal(Integer(5)),
+                            false: Some(
+                                (26-33)Block{
+                                    (27-31) ret (31)Ident("z"),
+                                },
+                            ),
+                        },
+                    ),
+                }
+                (35)Literal(Integer(3))
+            "#]],
         );
     }
 
