@@ -112,15 +112,15 @@ impl FnBody {
         inst: RValue,
         ty: Type,
         span: Span,
-    ) -> IP {
+    ) -> (BP, IP) {
         assert!(block < self.blocks.len());
         let ip = self.push_local(ty);
         self.blocks[block].stmts.push(Assign(ip, inst, span));
-        ip
+        (block, ip)
     }
 
     #[must_use]
-    pub(crate) fn push_constant(&mut self, block: BP, val: RuntimeValue, span: Span) -> IP {
+    pub(crate) fn push_constant(&mut self, block: BP, val: RuntimeValue, span: Span) -> (BP, IP) {
         self.push_assign_new_ip(block, Literal(val), val.get_type(), span)
     }
 
@@ -131,11 +131,11 @@ impl FnBody {
         val: RuntimeValue,
         span: Span,
     ) -> (BP, IP) {
-        (block, self.push_constant(block, val, span))
+        self.push_constant(block, val, span)
     }
 
     #[must_use]
-    pub(crate) fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {
+    pub(crate) fn push_unit_new_ip(&mut self, block: BP, span: Span) -> (BP, IP) {
         self.push_constant(block, RuntimeValue::UnitValue, span)
     }
 

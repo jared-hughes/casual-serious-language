@@ -228,8 +228,8 @@ impl Ctx<'_> {
                 }
             }
         }
-        let ip = self.body.push_unit_new_ip(block, DUMMY_SPAN);
-        Ok(((block, ip), DUMMY_SPAN))
+        let bip = self.body.push_unit_new_ip(block, DUMMY_SPAN);
+        Ok((bip, DUMMY_SPAN))
     }
 
     /// Returns (BP, IP).
@@ -240,7 +240,7 @@ impl Ctx<'_> {
             Paren(arg) => return self.add_expr(block, arg),
             Literal(lit) => {
                 let cooked = cook_lit(*lit);
-                (block, self.body.push_constant(block, cooked, ex.span))
+                self.body.push_constant(block, cooked, ex.span)
             }
             IdentExpr(x) => {
                 let Some(sv) = self.symbol_table.get_symbol(x) else {
@@ -271,11 +271,11 @@ impl Ctx<'_> {
 
                 self.body
                     .push(block, mir::Assign(ip, mir::Use(rhs_ip), DUMMY_SPAN));
-                (block, self.body.push_unit_new_ip(block, DUMMY_SPAN))
+                self.body.push_unit_new_ip(block, DUMMY_SPAN)
             }
             Unary(op, arg_node) => {
                 let (block, arg) = self.add_expr(block, arg_node)?;
-                (block, self.body.add_unary(block, *op, arg)?)
+                self.body.add_unary(block, *op, arg)?
             }
             Binary(op, left_node, right_node) => match op.node {
                 Or | And => {
@@ -338,7 +338,7 @@ impl Ctx<'_> {
                 _ => {
                     let (block, left) = self.add_expr(block, left_node)?;
                     let (block, right) = self.add_expr(block, right_node)?;
-                    (block, self.body.add_binary(block, *op, left, right)?)
+                    self.body.add_binary(block, *op, left, right)?
                 }
             },
             FnDefinition(fn_def) => err(ME::FnInExpr {
@@ -346,8 +346,8 @@ impl Ctx<'_> {
             })?,
             Block(stmts) => {
                 let mut child_ctx = self.child();
-                let ((block, ip), _sp) = child_ctx.add_stmts_ret(block, stmts)?;
-                (block, ip)
+                let (bip, _sp) = child_ctx.add_stmts_ret(block, stmts)?;
+                bip
             }
             FnCall(fun, arg_nodes) => {
                 let IdentExpr(fn_name) = &fun.body else {
@@ -385,13 +385,12 @@ impl Ctx<'_> {
                     }
                     args.push(ip);
                 }
-                let ip = self.body.push_assign_new_ip(
+                self.body.push_assign_new_ip(
                     block,
                     mir::FnCall(fn_name.to_string(), args),
                     sig.return_type,
                     ex.span,
-                );
-                (block, ip)
+                )
             }
             If(cond_node, if_node, else_node) => {
                 let (block, cond_ip) = self.add_expr(block, cond_node)?;
@@ -410,10 +409,7 @@ impl Ctx<'_> {
                 let if_bi = self.add_expr(if_block, if_node)?;
                 let else_bi = match else_node {
                     Some(else_node) => self.add_expr(else_block, else_node)?,
-                    None => (
-                        else_block,
-                        self.body.push_unit_new_ip(else_block, DUMMY_SPAN),
-                    ),
+                    None => self.body.push_unit_new_ip(else_block, DUMMY_SPAN),
                 };
                 let value_type = {
                     let if_type = self.body.get_type(if_bi.1);
@@ -488,7 +484,7 @@ impl Ctx<'_> {
 }
 
 impl FnBody {
-    fn add_unary(&mut self, block: BP, op: UnaryOp, arg: IP) -> Result<IP, Diag> {
+    fn add_unary(&mut self, block: BP, op: UnaryOp, arg: IP) -> Result<(BP, IP), Diag> {
         let arg_type = self.get_type(arg);
         let op1 = match (op.node, arg_type) {
             (Neg, I64) => OP1::NegI64,
@@ -504,7 +500,7 @@ impl FnBody {
         Ok(self.push_assign_new_ip(block, mir::Unary(op1, arg), ty, op.span))
     }
 
-    fn add_binary(&mut self, block: BP, op: BinOp, left: IP, right: IP) -> Result<IP, Diag> {
+    fn add_binary(&mut self, block: BP, op: BinOp, left: IP, right: IP) -> Result<(BP, IP), Diag> {
         let left_type = self.get_type(left);
         let right_type = self.get_type(right);
         let op2 = match (op.node, left_type, right_type) {
