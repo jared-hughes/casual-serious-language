@@ -1,4 +1,4 @@
-use crate::ast;
+use crate::ast::{self, Mutability};
 use crate::errors::{Diag, Diagnostic};
 use crate::lexer::Lexer;
 use crate::parser_err as PE;
@@ -8,7 +8,7 @@ use std::iter::Peekable;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 enum BindingPower {
-    // Inside parens
+    // Inside parens, to the right of `=`, etc.
     Top,
     // ||
     Or,
@@ -162,14 +162,14 @@ impl<'a> Parser<'a> {
             Kw(Let) => {
                 let let_token = self.next()?;
                 // x
-                let ident = consume_ident!(self, PE::LetExpName);
+                let lhs = self.parse_lhs()?;
                 // =
-                consume_token!(self, Equals, PE::LetExpEquals { ident });
+                consume_token!(self, Equals, PE::LetExpEquals { ident: lhs.ident });
                 // y * 2
                 let expr = self.parse_expr()?;
                 ast::Statement {
                     span: span(let_token.span.lo, expr.span.hi),
-                    kind: ast::StatementKind::Let(ident),
+                    kind: ast::StatementKind::Let(lhs),
                     expr,
                 }
             }
@@ -272,7 +272,7 @@ impl<'a> Parser<'a> {
             CloseDelim(Parenthesis) => err(PE::UnmatchedCloseParen.span(start.span)),
             Eof => err(PE::UnexpectedEOF.span(start.span)),
             CloseDelim(CurlyBrace)
-            | Kw(Else | Let | Ret)
+            | Kw(Else | Let | Ret | Mut)
             | Colon
             | Comma
             | ThinArrow
@@ -299,6 +299,15 @@ impl<'a> Parser<'a> {
                     Some(self.next()?)
                 }
             }
+            Equals => {
+                // Shouldn't matter in valid code, but we want to parse
+                // `1 + x = 5` as `(1 + x) = 5` to report error earlier.
+                if BindingPower::Top < last_bp {
+                    None
+                } else {
+                    Some(self.next()?)
+                }
+            }
             _ => None,
         })
     }
@@ -307,6 +316,7 @@ impl<'a> Parser<'a> {
         match tok.kind {
             BinOp(t) => Ok(self.parse_binop(left, t, tok.span)?),
             OpenDelim(Parenthesis) => Ok(self.parse_call(left)?),
+            Equals => Ok(self.parse_assign(*left)?),
             // Expected consequent_good to return `None` first, if this is reached.
             _ => panic!("Invariant violation: entered non-good consequent"),
         }
@@ -352,6 +362,20 @@ impl<'a> Parser<'a> {
         let close_paren = consume_token!(self, CloseDelim(Parenthesis), PE::CallExpCloseParen);
         let s = span(left.span.lo, close_paren.span.hi);
         Ok(expr(ast::FnCall(left, args), s))
+    }
+
+    fn parse_assign(&mut self, lhs: ast::Expr) -> ExprResult {
+        let ast::IdentExpr(name) = lhs.body else {
+            return err(PE::AssignLHSMustBeIdent.span(lhs.span));
+        };
+        // Already saw the '='.
+        let rhs = self.parse_expr()?;
+        let s = span(lhs.span.lo, rhs.span.hi);
+        let ident = ast::Ident {
+            name,
+            span: lhs.span,
+        };
+        Ok(expr(ast::Assign(ident, rhs), s))
     }
 
     fn parse_block(&mut self, start_curly: Token) -> ExprResult {
@@ -455,6 +479,18 @@ impl<'a> Parser<'a> {
         };
         let s = span(if_token.span.lo, hi);
         Ok(expr(ast::If(cond, true_branch, false_branch), s))
+    }
+
+    fn parse_lhs(&mut self) -> Result<ast::LetLHS, Diag> {
+        let mut mutability = Mutability::No;
+        // mut
+        if let Kw(Mut) = self.peek()?.kind {
+            self.next()?;
+            mutability = Mutability::Yes;
+        }
+        // x
+        let ident = consume_ident!(self, PE::LetExpName);
+        Ok(ast::LetLHS { ident, mutability })
     }
 }
 
@@ -656,6 +692,22 @@ mod parser_expr_tests {
                 (7)Ident("y"),
             )"#]],
         );
+        // Assign = Top < Or
+        check_parsing(
+            "x = y || z",
+            expect![[r#"
+                (1-10)Assign {
+                    ident: (1)Ident("x"),
+                    expr: (5-10)Binary[Or(7-8)](
+                        (5)Ident("y"),
+                        (10)Ident("z"),
+                    ),
+                }"#]],
+        );
+        check_parsing(
+            "x || y = z",
+            expect!["At 1-6: Left-hand-side of assignment must be an identifier, not a composite expression. For example: `x = 5;`"],
+        );
         // Or < And
         check_parsing(
             "x && y || z && w",
@@ -856,6 +908,18 @@ mod parser_expr_tests {
 
     #[test]
     fn associativity() {
+        // Assign
+        check_parsing(
+            "x = y = z",
+            expect![[r#"
+                (1-9)Assign {
+                    ident: (1)Ident("x"),
+                    expr: (5-9)Assign {
+                        ident: (5)Ident("y"),
+                        expr: (9)Ident("z"),
+                    },
+                }"#]],
+        );
         // Or
         check_parsing(
             "x || y || z",
@@ -1284,6 +1348,10 @@ mod parser_stmt_tests {
 
     #[test]
     fn let_stmt() {
+        check_parsing(
+            "let mut x = 5",
+            expect!["(1-13) let mut x = (13)Literal(Integer(5))"],
+        );
         check_parsing("let x = 5", expect!["(1-9) let x = (9)Literal(Integer(5))"]);
         check_parsing("let x", expect!["At (!6,6!): Expected an '=', to provide an initial value for 'x'. For example: `let x = 5;`"]);
         check_parsing("()", expect!["(1-2)Literal(Unit)"]);

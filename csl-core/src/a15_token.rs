@@ -66,6 +66,8 @@ pub(crate) enum Keyword {
     If,
     /// 'else'
     Else,
+    /// 'mut'
+    Mut,
 }
 
 pub(crate) use TokenKind::*;

@@ -5,6 +5,7 @@ use crate::token;
 
 const EXAMPLE_FN: &str = "For example: `fn add(x: u64, y: u64) -> u64 { x + y }`";
 const EXAMPLE_LET: &str = "For example: `let x = 5;`";
+const EXAMPLE_ASSIGN: &str = "For example: `x = 5;`";
 const EXAMPLE_IF: &str = "For example: `if (x > 5) 1 else 0`.";
 
 def_token_errors! {
@@ -37,6 +38,9 @@ IfExpCloseParen => {
 },
 ExpType => {
     "Expected a type here. Try 'i64' or '()'.".to_string()
+},
+AssignLHSMustBeIdent => {
+    format!("Left-hand-side of assignment must be an identifier, not a composite expression. {EXAMPLE_ASSIGN}")
 },
 }
 

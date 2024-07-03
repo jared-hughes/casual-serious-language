@@ -368,4 +368,36 @@ mod interpret_stmt_tests {
             expect!["Bool(false)"],
         );
     }
+
+    #[test]
+    fn assignments() {
+        check_interpret_mir(
+            "fn main() -> i64 {
+                let mut x = 5; x = 20; ret x;
+            }",
+            expect!["I64(20)"],
+        );
+        check_interpret_mir(
+            "fn main() -> i64 {
+                let mut x = 20;
+                let mut y = 5;
+                if (x > 10) y = x + 7;
+                ret y;
+            }",
+            expect!["I64(27)"],
+        );
+        check_interpret_mir(
+            "fn f(x: i64) -> i64 {
+                let mut y = x;
+                y = 10;
+                ret y;
+            }
+            fn main() -> i64 {
+                let mut x = 10;
+                let y = f(x);
+                ret x;
+            }",
+            expect!["I64(10)"],
+        );
+    }
 }

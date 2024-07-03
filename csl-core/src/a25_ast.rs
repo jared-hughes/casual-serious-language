@@ -83,7 +83,7 @@ impl fmt::Display for UnaryOpKind {
 
 pub(crate) type UnaryOp = Spanned<UnaryOpKind>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct Ident {
     pub(crate) name: String,
     pub(crate) span: Span,
@@ -92,6 +92,12 @@ pub(crate) struct Ident {
 impl fmt::Display for Ident {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+impl fmt::Debug for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:?})Ident({:?})", self.span, self.name)
     }
 }
 
@@ -127,6 +133,8 @@ pub(crate) enum ExprInner {
     FnCall(Box<Expr>, Vec<Expr>),
     /// If expression `if (x > 0) 1 else 0`
     If(Box<Expr>, Box<Expr>, Option<Box<Expr>>),
+    /// Assignment expression `x = 3`
+    Assign(Ident, Box<Expr>),
 }
 
 pub(crate) struct Expr {
@@ -184,6 +192,11 @@ impl fmt::Debug for ExprInner {
                 .field("true", true_branch)
                 .field("false", false_branch)
                 .finish(),
+            Assign(ident, expr) => f
+                .debug_struct("Assign")
+                .field("ident", ident)
+                .field("expr", expr)
+                .finish(),
         }
     }
 }
@@ -194,10 +207,35 @@ impl fmt::Debug for Expr {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Mutability {
+    Yes,
+    No,
+}
+impl Mutability {
+    fn prefix(&self) -> &str {
+        match self {
+            Mutability::Yes => "mut ",
+            Mutability::No => "",
+        }
+    }
+}
+
+pub(crate) struct LetLHS {
+    pub(crate) ident: Ident,
+    pub(crate) mutability: Mutability,
+}
+
+impl fmt::Debug for LetLHS {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.mutability.prefix(), self.ident)
+    }
+}
+
 pub(crate) use StatementKind::*;
 pub(crate) enum StatementKind {
     /// `let x = 5;`
-    Let(Ident),
+    Let(LetLHS),
     /// `ret 5`
     Ret,
     /// `5`
@@ -213,7 +251,7 @@ pub(crate) struct Statement {
 impl fmt::Debug for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            Let(ident) => write!(f, "({:?}) let {} = ", self.span, ident)?,
+            Let(lhs) => write!(f, "({:?}) let {:?} = ", self.span, lhs)?,
             Ret => write!(f, "({:?}) ret ", self.span)?,
             Bare => {}
         }

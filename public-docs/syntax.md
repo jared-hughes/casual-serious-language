@@ -57,6 +57,20 @@ fn sum_square(x: f64, y: f64) -> f64 {
 }
 ```
 
+## Mutable variables and assignments
+
+Use `let mut x = 5` to create a mutable variable `x`. Assign to it with `x = 8`. Function parameters are _not_ mutable.
+
+```rs
+fn abs_diff_cubed(x: i64, y: i64) -> f64 {
+  let mut d = x - y;
+  if (d < 0) {
+    d = -d;
+  }
+  ret d * d * d;
+}
+```
+
 ## If-else
 
 ```rs
@@ -85,16 +99,6 @@ fn funny_polynomial(x: f64) -> f64 {
   ret y + z;
 }
 ```
-
-## Optional Semicolons (not yet implemented)
-
-Currently, semicolons are required after each statement (besides functions, which end in a curly brace `}`).
-
-The plan is to eventually make semicolons optional everywhere (but suggested -- a hypothetical auto-formatter would insert them).
-
-- We don't want a statement looking like `[1,2,3].map(..)` since it could be confused as an array access of the previous line. It should be something like `vec![1,2,3].map(..)` instead.
-  - I don't like this though. It's so nice to just write `[1,2,3]`.
-- We want to avoid introducing syntax that allows e.g. `-x < 3 || print(x)`, since that would get confused as a subtraction with the previous line.
 
 ## `return` keyword (not yet implemented)
 

@@ -10,14 +10,17 @@ Reference [public-docs/syntax.md](/public-docs/syntax.md) for the language synta
 
 Features (expected)
 
-- Add mutable variables, making if-without-else useful.
-- Allow variables to be uninitialized
+- Allow `let mut` variables to be uninitialized
   - This supports some if-else assignments, and (in the future) `let` expressions that may not execute.
 - Allow type hints on variables.
 - Literals `true` and `false`.
 - `return` keyword as described in syntax.md.
 - Allow `let` as an expression.
   - Returns `bool` saying if the pattern match binding was successful.
+  - `let x = 5;` can desugar into `let x; x=5;`, but for `if (let x = 5 && let y = 6) {} else {}`, the `else` should not have access to `x` and `y`.
+  - Note `if (let Some(x) = x1 || let Some(y) = y1) {} else {}` can bind neither `x` nor `y`.
+    - Rust calls this E408: variable not bound in all patterns. Would need to replace with `Some(_)` or `Some(..)` on the LHS.
+  - Regular assignment `a = 5` could be an expression too, but it shouldn't return a bool, to avoid confusion in `if (a = 5) { }`.
 - `never` type to properly type "return"
 - Chaining comparison operations
 
@@ -31,15 +34,19 @@ High-effort enhancements
 
 Other enhancements
 
+- Pass down a `used` boolean that avoids bloating the IR with a bunch of unit literals.
+  - Or maybe instead an `enum Usage { Discarded, Used(ip), Unknown }` to also avoid a bunch of `Use()`
 - (Maybe) Panic for runtime errors instead of propagating `Result`.
 - Say "Syntax Error" etc in error messages. Maybe set this up as a category on the diagnostic object?
 - Codemirror in the web preview, to underline errors.
   - Ctrl-Enter to run code.
 - `TODO-errormsg` and `TODO-perf` in the code.
+- Reserved words to disallow some names like `union` or `yeet`.
+- Insert semicolon (`;`) after final close-curly of if-then and if-then-else.
 
 Bug fixes
 
-- None noted.
+- Don't allow variables with the same name as functions. (This counts as shadowing).
 
 Code cleanups
 

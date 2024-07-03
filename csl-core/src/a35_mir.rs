@@ -105,6 +105,7 @@ impl FnBody {
     }
 
     /// Create a new IP (local var) and assign to it.
+    #[must_use]
     pub(crate) fn push_assign_new_ip(
         &mut self,
         block: BP,
@@ -118,10 +119,12 @@ impl FnBody {
         ip
     }
 
+    #[must_use]
     pub(crate) fn push_constant(&mut self, block: BP, val: RuntimeValue, span: Span) -> IP {
         self.push_assign_new_ip(block, Literal(val), val.get_type(), span)
     }
 
+    #[must_use]
     pub(crate) fn push_constant_bi(
         &mut self,
         block: BP,
@@ -131,11 +134,13 @@ impl FnBody {
         (block, self.push_constant(block, val, span))
     }
 
+    #[must_use]
     pub(crate) fn push_unit_new_ip(&mut self, block: BP, span: Span) -> IP {
         self.push_constant(block, RuntimeValue::UnitValue, span)
     }
 
     /// Create a new IP (local var)
+    #[must_use]
     pub(crate) fn push_local(&mut self, value_type: Type) -> IP {
         let ind = self.types.len();
         let ip = IP::from_usize(ind);
@@ -150,8 +155,8 @@ impl FnBody {
     /// Push a statement, checked.
     pub(crate) fn push(&mut self, block: BP, stmt: Statement) {
         assert!(block < self.blocks.len());
-        let Assign(ip, ref rval, _) = stmt;
-        self.sanity_check_assign(ip, rval);
+        let Assign(_ip, ref rval, _sp) = stmt;
+        self.sanity_check_rval(rval);
         self.blocks[block].stmts.push(stmt);
     }
 
@@ -165,29 +170,18 @@ impl FnBody {
     }
 
     #[mutants::skip] // This is a no-op when codegen is correct.
-    fn sanity_check_assign(&self, ip: IP, rval: &RValue) {
+    fn sanity_check_rval(&self, rval: &RValue) {
         match *rval {
-            Use(a, ..) => {
-                assert!(a < ip);
-            }
-            Literal(..) => (),
             Unary(op, a) => {
-                assert!(a < ip);
                 let info = op.get_intrinsic();
                 assert!(info.param_types == self.get_type(a));
             }
             Binary(op, a, b) => {
-                assert!(a < ip);
-                assert!(b < ip);
                 let info = op.get_intrinsic();
                 assert!(info.param_types.0 == self.get_type(a));
                 assert!(info.param_types.1 == self.get_type(b));
             }
-            FnCall(_, ref args) => {
-                for a in args {
-                    assert!(a < &ip);
-                }
-            }
+            _ => (),
         }
     }
 

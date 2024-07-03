@@ -41,6 +41,17 @@ msg: self => format!(
     self.name
 );
 
+pub(crate) struct LocalImmutable {
+    /// The span of the identifier reference
+    pub(crate) span: Span,
+    /// Name of identifier
+    pub(crate) name: String,
+}
+msg: self => format!(
+    "Identifier '{0}' is immutable. Try declaring it with 'let mut {0}' instead.",
+    self.name
+);
+
 pub(crate) struct CallNotIdent {
     /// Span of function name
     pub(crate) span: Span,

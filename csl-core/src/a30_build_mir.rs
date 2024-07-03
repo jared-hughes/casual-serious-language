@@ -8,7 +8,7 @@ use crate::intrinsics::{OP1, OP2};
 use crate::mir::{self, FnBody, BP, IP};
 use crate::runtime_value::{cook_lit, RuntimeValue};
 use crate::span::{Span, DUMMY_SPAN};
-use crate::symbol_table::SymbolTable;
+use crate::symbol_table::{Local, SymbolTable};
 use crate::types::*;
 
 pub(crate) fn ast_to_mir(program: &Program) -> Result<mir::Program, Diag> {
@@ -168,7 +168,13 @@ impl Ctx<'_> {
                 }
                 .into_diag())?;
             }
-            self.symbol_table.set_symbol(name, ip);
+            self.symbol_table.set_symbol(
+                name,
+                Local {
+                    mutability: Mutability::No,
+                    ip,
+                },
+            );
         }
 
         let ((block, ip), ret_span) = self.add_stmts_ret(block, &fn_def.body)?;
@@ -198,8 +204,8 @@ impl Ctx<'_> {
                     let (block, ip) = self.add_expr(block, expr)?;
                     return Ok(((block, ip), expr.span));
                 }
-                Let(ident) => {
-                    if self.symbol_table.get_symbol(&ident.name).is_some() {
+                Let(LetLHS { ident, mutability }) => {
+                    if self.symbol_table.has_symbol(&ident.name) {
                         return Err(ME::DuplicateDefinition {
                             span: ident.span,
                             name: ident.name.to_string(),
@@ -208,7 +214,13 @@ impl Ctx<'_> {
                     }
                     let (block1, ip) = self.add_expr(block, expr)?;
                     block = block1;
-                    self.symbol_table.set_symbol(ident.name.to_string(), ip);
+                    self.symbol_table.set_symbol(
+                        ident.name.to_string(),
+                        Local {
+                            ip,
+                            mutability: *mutability,
+                        },
+                    );
                 }
                 _ => {
                     let (block1, _ip) = self.add_expr(block, expr)?;
@@ -231,13 +243,35 @@ impl Ctx<'_> {
                 (block, self.body.push_constant(block, cooked, ex.span))
             }
             IdentExpr(x) => {
-                let Some(ip) = self.symbol_table.get_symbol(x) else {
+                let Some(sv) = self.symbol_table.get_symbol(x) else {
                     err(ME::IdentifierNotFound {
                         span: ex.span,
                         name: x.to_string(),
                     })?
                 };
+                let Local { ip, mutability: _ } = *sv;
                 (block, ip)
+            }
+            Assign(ident, expr) => {
+                let Some(sv) = self.symbol_table.get_symbol(&ident.name) else {
+                    err(ME::IdentifierNotFound {
+                        span: ident.span,
+                        name: ident.name.to_string(),
+                    })?
+                };
+                let Local { ip, mutability } = *sv;
+                let Mutability::Yes = mutability else {
+                    err(ME::LocalImmutable {
+                        span: ident.span,
+                        name: ident.name.to_string(),
+                    })?
+                };
+
+                let (block, rhs_ip) = self.add_expr(block, expr)?;
+
+                self.body
+                    .push(block, mir::Assign(ip, mir::Use(rhs_ip), DUMMY_SPAN));
+                (block, self.body.push_unit_new_ip(block, DUMMY_SPAN))
             }
             Unary(op, arg_node) => {
                 let (block, arg) = self.add_expr(block, arg_node)?;
@@ -779,6 +813,14 @@ mod build_mir_expr_block {
         check_build_mir(
             "{ let x=1; ret {let x=3; ret x*4;};}",
             expect!["At 41: Cannot redefine 'x' since it is already defined."],
+        );
+    }
+
+    #[test]
+    fn scoping() {
+        check_build_mir(
+            "{ let x = 1; ret x; } + x",
+            expect!["At 45: Identifier 'x' not found in the local scope of the function."],
         );
     }
 }
@@ -1332,6 +1374,77 @@ mod build_mir_functions {
                 ret z;
             }",
             expect!["At 35: Cannot redefine 'x' since it is already defined."],
+        );
+    }
+
+    #[test]
+    fn fn_mut_errors() {
+        check_build_mir(
+            "fn f(x: i64) -> i64 {let y=0; y=5; ret y;}",
+            expect![
+                "At 31: Identifier 'y' is immutable. Try declaring it with 'let mut y' instead."
+            ],
+        );
+        check_build_mir(
+            "fn f(x: i64) -> i64 {x=5; ret x;}",
+            // TODO-errormsg: wasn't declared with 'let', so inappropriate error message.
+            expect![
+                "At 22: Identifier 'x' is immutable. Try declaring it with 'let mut x' instead."
+            ],
+        );
+        check_build_mir(
+            "fn f(x: i64) -> i64 {f=5; ret f;}",
+            // TODO-errormsg: include 'f' in scope.
+            expect!["At 22: Identifier 'f' not found in the local scope of the function."],
+        );
+    }
+
+    #[test]
+    fn fn_mut() {
+        check_build_mir(
+            "fn f() -> i64 {
+                let mut y = 0;
+                y = 5;
+                ret y;
+            }",
+            expect![[r#"
+                fn f:
+                BP(0): BasicBlock
+                  IP(0) = Literal(I64(0))
+                  IP(1) = Literal(I64(5))
+                  IP(0) = Use(IP(1))
+                  IP(2) = Literal(UnitValue)
+                  Return(IP(0))
+            "#]],
+        );
+        check_build_mir(
+            "fn f(x: i64) -> i64 {
+                let mut y = 0;
+                if (x > 10) y = x;
+                ret y;
+            }",
+            expect![[r#"
+                fn f:
+                BP(0): BasicBlock
+                  IP(1) = Literal(I64(0))
+                  IP(2) = Literal(I64(10))
+                  IP(3) = Binary(GtI64, IP(0), IP(2))
+                  If { cond: IP(3), true_branch: BP(1), false_branch: BP(2) }
+
+                BP(1): BasicBlock
+                  IP(1) = Use(IP(0))
+                  IP(4) = Literal(UnitValue)
+                  IP(6) = Use(IP(4))
+                  Goto { target: BP(3) }
+
+                BP(2): BasicBlock
+                  IP(5) = Literal(UnitValue)
+                  IP(6) = Use(IP(5))
+                  Goto { target: BP(3) }
+
+                BP(3): BasicBlock
+                  Return(IP(1))
+            "#]],
         );
     }
 }

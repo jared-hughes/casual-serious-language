@@ -238,6 +238,7 @@ impl<'a> RawLexer<'a> {
             () if s == "let" => Kw(Let),
             () if s == "if" => Kw(If),
             () if s == "else" => Kw(Else),
+            () if s == "mut" => Kw(Mut),
             _ => Ident(s),
         }
     }
